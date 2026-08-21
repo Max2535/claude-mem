@@ -59,16 +59,28 @@ export interface StreamEvent {
   queueDepth?: number;
 }
 
-/** One node of GET /api/sessions/tree. */
-export interface ExplorerSession {
+
+/** One node-worth of an observation in the Explorer graph. */
+export interface ExplorerDayObservation {
+  id: number;
   sessionId: string;
-  /** Stable identity for the node; sessionId rotates when a session continues. */
   contentSessionId: string;
   project: string;
-  label: string;
-  count: number;
-  firstAt: number;
-  lastAt: number;
+  platformSource: string;
+  type: string;
+  title: string | null;
+  subtitle: string | null;
+  promptNumber: number | null;
+  createdAt: number;
+}
+
+/** Shape of GET /api/explorer/day. */
+export interface ExplorerDay {
+  /** null only when nothing is recorded at all. */
+  day: string | null;
+  /** Every day with observations, ascending — drives the date stepper. */
+  days: string[];
+  observations: ExplorerDayObservation[];
 }
 
 /** Shape of GET /api/stats. */

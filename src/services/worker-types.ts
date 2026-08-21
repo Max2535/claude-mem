@@ -105,18 +105,28 @@ export interface PaginatedResult<T> {
 }
 
 /** One node of the Explorer tree: a session, summarised. */
-export interface ExplorerSession {
+
+/** One node-worth of an observation in the Explorer graph. */
+export interface ExplorerDayObservation {
+  id: number;
   sessionId: string;
-  /**
-   * Stable across the worker rotating memory_session_id when a session
-   * continues, which sessionId is not — see the Explorer docs.
-   */
   contentSessionId: string;
   project: string;
-  label: string;
-  count: number;
-  firstAt: number;
-  lastAt: number;
+  platformSource: string;
+  type: string;
+  title: string | null;
+  subtitle: string | null;
+  promptNumber: number | null;
+  createdAt: number;
+}
+
+/** Shape of GET /api/explorer/day. */
+export interface ExplorerDay {
+  /** null only when nothing is recorded at all. */
+  day: string | null;
+  /** Every day with observations, ascending — drives the date stepper. */
+  days: string[];
+  observations: ExplorerDayObservation[];
 }
 
 export interface ViewerSettings {

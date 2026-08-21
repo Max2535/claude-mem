@@ -8,7 +8,7 @@ HTTP layer, and SQLite. Below is every edge between them, taken from the actual
 `import` statements and route registrations rather than drawn from memory.
 
 The whole graph is acyclic with a single root, `App.tsx`. It is split in two
-here only so the labels stay readable — the three HTTP endpoints are the seam,
+here only so the labels stay readable — the two HTTP endpoints are the seam,
 appearing as leaves in the first graph and roots in the second.
 
 Blue nodes were added for Explorer, amber nodes already existed and were
@@ -26,26 +26,26 @@ flowchart LR
   Route["useRoute.ts"]:::touched
   Nav["constants/nav.ts"]:::touched
   Exp["Explorer.tsx"]:::new
-  Hook["useExplorerTree.ts"]:::new
+  Graph["TreeGraph.tsx"]:::new
+  Hook["useExplorerDay.ts"]:::new
+  Tidy["utils/tidyTree.ts"]:::new
+  Hier["utils/explorerHierarchy.ts"]:::new
   Card["ObservationCard.tsx"]:::existing
-  Types["viewer/types.ts"]:::touched
-  Api["constants/api.ts"]:::existing
-  E1(["/api/sessions/tree"]):::new
-  E2(["/api/observations?session="]):::touched
-  E3(["/api/observation/:id"]):::existing
+  E1(["/api/explorer/day"]):::new
+  E2(["/api/observation/:id"]):::existing
 
   App --> Route
   App --> Nav
   App --> Exp
   Route --> Nav
-  Exp --> Card
-  Exp --> Types
+  Exp --> Graph
   Exp --> Hook
-  Exp --> E3
-  Hook --> Api
-  Hook --> Types
+  Exp --> Hier
+  Exp --> Card
+  Exp --> E2
+  Graph --> Tidy
+  Graph --> Hier
   Hook --> E1
-  Hook --> E2
 ```
 
 ## Worker side
@@ -56,9 +56,8 @@ flowchart TD
   classDef touched fill:#fef3c7,stroke:#d97706,color:#5a3d00
   classDef existing fill:#f1f5f9,stroke:#94a3b8,color:#334155
 
-  E1(["/api/sessions/tree"]):::new
-  E2(["/api/observations?session="]):::touched
-  E3(["/api/observation/:id"]):::existing
+  E1(["/api/explorer/day"]):::new
+  E2(["/api/observation/:id"]):::existing
   DR["DataRoutes.ts"]:::touched
   PH["PaginationHelper.ts"]:::touched
   WT["worker-types.ts"]:::touched
@@ -67,7 +66,6 @@ flowchart TD
 
   E1 --> DR
   E2 --> DR
-  E3 --> DR
   DR --> PH
   PH --> WT
   PH --> DB
@@ -76,27 +74,22 @@ flowchart TD
 
 ## What the shape tells you
 
-**Three endpoints converge on `DataRoutes.ts`.** It is the single place where a
-change to how sessions are scoped or paginated can break the tree, and it is
-the file to read first when the tree disagrees with the Recall feed — both go
-through it.
+**The layout is split from the data.** `tidyTree.ts` knows nothing about
+memory; it turns any tree into positioned nodes. `explorerHierarchy.ts` knows
+nothing about pixels; it turns a day's rows into a tree. `TreeGraph.tsx` is the
+only file that holds both, which is why the two grouping modes cost no extra
+request — they are a different call into the second file, not a different
+fetch.
 
-**`GET /api/observation/:id` hangs off `Explorer.tsx` directly**, not off
-`useExplorerTree.ts` like the other two. That edge exists only for deep links:
-opening `#/explorer/<id>` cold means nothing has loaded the observation yet, so
-the component asks which session owns it before any session can be expanded.
+**Two endpoints, both through `DataRoutes.ts`.** The day endpoint feeds the
+graph; the single-observation endpoint exists only for the detail panel and for
+deep links, which have to resolve an id before any day is known.
 
 **The tree carries two session ids.** `sessionId` is the `memory_session_id`
-the observation query filters on; `contentSessionId` is what the viewer keys
-expansion and page caches on, because the worker rotates the former whenever a
-session continues.
+observations actually hold; `contentSessionId` is what the session tier groups
+on, because the worker rotates the former whenever a session continues.
 
-**`ExplorerSession` appears twice** — once in `services/worker-types.ts` and
-once in `viewer/types.ts`. The viewer's `tsconfig.json` pins `rootDir` to the
-viewer directory, so it cannot import the worker's type; the two declarations
-must be edited together.
-
-**Nothing points back up.** No worker module imports a viewer module and no
-hook imports a component, which is what keeps the graph acyclic. A new edge
+**Nothing points back up.** No worker module imports a viewer module, and no
+util imports a component, which is what keeps the graph acyclic. A new edge
 that violates this — a shared helper importing `App.tsx`, say — would introduce
 a cycle and should be split instead.

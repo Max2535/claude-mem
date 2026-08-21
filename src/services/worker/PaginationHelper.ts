@@ -4,7 +4,7 @@ import { DatabaseManager } from './DatabaseManager.js';
 import { logger } from '../../utils/logger.js';
 import { OBSERVER_SESSIONS_PROJECT } from '../../shared/paths.js';
 import { USER_PROMPT_DEDUPE_WINDOW_MS } from '../../shared/user-prompts.js';
-import type { PaginatedResult, Observation, Summary, UserPrompt, ExplorerSession } from '../worker-types.js';
+import type { PaginatedResult, Observation, Summary, UserPrompt, ExplorerDay, ExplorerDayObservation } from '../worker-types.js';
 
 export class PaginationHelper {
   private dbManager: DatabaseManager;
@@ -116,65 +116,75 @@ export class PaginationHelper {
   }
 
   /**
-   * One row per session for the Explorer tree. Counting in SQL rather than
-   * grouping a paginated observation feed client-side keeps the counts honest
-   * on a database the viewer has only read the first page of.
+   * Every observation on one local day, projected down to what the Explorer
+   * graph draws. The narrative and text columns are omitted on purpose — the
+   * graph shows a few hundred nodes and only needs their labels; the detail
+   * pane fetches the full row for the one node that gets selected.
+   *
+   * `days` comes back on every call so the date stepper always knows where the
+   * neighbours are without a second round trip.
    */
-  getSessionTree(project?: string, platformSource?: string): ExplorerSession[] {
+  getExplorerDay(day: string | undefined, project?: string, platformSource?: string): ExplorerDay {
     const db = this.dbManager.getSessionStore().db;
 
-    // The label falls back through custom_title -> oldest observation title ->
-    // a short id, because custom_title is usually empty and the session's own
-    // user_prompt collides across sessions (every `/doctor` run looks alike).
-    let query = `
-      SELECT
-        o.memory_session_id as sessionId,
-        COALESCE(s.content_session_id, o.memory_session_id) as contentSessionId,
-        COALESCE(s.project, MIN(o.project)) as project,
-        COALESCE(
-          NULLIF(s.custom_title, ''),
-          (
-            SELECT o2.title FROM observations o2
-            WHERE o2.memory_session_id = o.memory_session_id AND o2.title IS NOT NULL
-            ORDER BY o2.created_at_epoch ASC LIMIT 1
-          ),
-          'Session ' || SUBSTR(o.memory_session_id, 1, 6)
-        ) as label,
-        COUNT(*) as count,
-        MIN(o.created_at_epoch) as firstAt,
-        MAX(o.created_at_epoch) as lastAt
-      FROM observations o
-      LEFT JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id
-    `;
-    const params: SQLQueryBindings[] = [];
-    const conditions: string[] = [];
-
-    // Mirrors getObservations() exactly: a tree that scoped projects
-    // differently from the feed would disagree with it on the same filter.
+    const scope: string[] = [];
+    const scopeParams: SQLQueryBindings[] = [];
     if (project) {
-      conditions.push('(o.project = ? OR o.merged_into_project = ?)');
-      params.push(project, project);
+      scope.push('(o.project = ? OR o.merged_into_project = ?)');
+      scopeParams.push(project, project);
     } else {
-      conditions.push('o.project != ?');
-      params.push(OBSERVER_SESSIONS_PROJECT);
+      scope.push('o.project != ?');
+      scopeParams.push(OBSERVER_SESSIONS_PROJECT);
     }
     if (platformSource) {
-      conditions.push(`COALESCE(s.platform_source, 'claude') = ?`);
-      params.push(platformSource);
+      scope.push(`COALESCE(s.platform_source, 'claude') = ?`);
+      scopeParams.push(platformSource);
+    }
+    const where = scope.join(' AND ');
+
+    // localtime, not UTC: the day boundaries a person means are their own.
+    const dayExpr = `date(o.created_at_epoch / 1000, 'unixepoch', 'localtime')`;
+
+    const days = (db.prepare(`
+      SELECT DISTINCT ${dayExpr} as day
+      FROM observations o
+      LEFT JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id
+      WHERE ${where}
+      ORDER BY day ASC
+    `).all(...scopeParams) as { day: string }[]).map(row => row.day);
+
+    const selected = day && days.includes(day) ? day : days[days.length - 1];
+
+    if (!selected) {
+      logger.debug('WORKER', 'PaginationHelper: explorer day empty', { day, project });
+      return { day: null, days: [], observations: [] };
     }
 
-    query += ` WHERE ${conditions.join(' AND ')}`;
-    query += ' GROUP BY o.memory_session_id ORDER BY lastAt DESC';
+    const observations = db.prepare(`
+      SELECT
+        o.id,
+        o.memory_session_id as sessionId,
+        COALESCE(s.content_session_id, o.memory_session_id) as contentSessionId,
+        o.project,
+        COALESCE(s.platform_source, 'claude') as platformSource,
+        o.type,
+        o.title,
+        o.subtitle,
+        o.prompt_number as promptNumber,
+        o.created_at_epoch as createdAt
+      FROM observations o
+      LEFT JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id
+      WHERE ${where} AND ${dayExpr} = ?
+      ORDER BY o.created_at_epoch ASC
+    `).all(...scopeParams, selected) as ExplorerDayObservation[];
 
-    const sessions = db.prepare(query).all(...params) as ExplorerSession[];
-
-    logger.debug('WORKER', 'PaginationHelper: built session tree', {
-      sessions: sessions.length,
-      project,
-      platformSource,
+    logger.debug('WORKER', 'PaginationHelper: built explorer day', {
+      day: selected,
+      days: days.length,
+      observations: observations.length,
     });
 
-    return sessions;
+    return { day: selected, days, observations };
   }
 
   getSummaries(offset: number, limit: number, project?: string, platformSource?: string): PaginatedResult<Summary> {

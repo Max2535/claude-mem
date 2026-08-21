@@ -1,88 +1,81 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { ObservationCard } from './ObservationCard';
-import { useExplorerTree, nodeKey } from '../hooks/useExplorerTree';
-import { Observation, ExplorerSession } from '../types';
+import { TreeGraph } from './TreeGraph';
+import { useExplorerDay } from '../hooks/useExplorerDay';
+import { splitIntoBlocks, GroupMode } from '../utils/explorerHierarchy';
+import { Observation } from '../types';
 
-type GroupMode = 'time' | 'project';
+const TABS = [
+  { id: 'tree', label: 'Tree', built: true },
+  { id: 'digest', label: 'Digest', built: false },
+  { id: 'activity', label: 'Activity', built: false },
+] as const;
+
+type TabId = typeof TABS[number]['id'];
 
 interface ExplorerProps {
   currentFilter: string;
   liveObservationCount: number;
-  /** Observation id from the URL tail, or undefined for the empty pane. */
+  /** Observation id from the URL tail, or undefined for no selection. */
   selectedId?: string;
   onSelect: (observationId?: string) => void;
 }
 
-function dayKey(epoch: number): string {
-  return new Date(epoch).toLocaleDateString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+function formatDay(day: string): string {
+  // Parse as local midnight rather than letting Date treat it as UTC, which
+  // would shift the label a day backwards west of Greenwich.
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString([], {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   });
 }
 
-function timeLabel(epoch: number): string {
-  return new Date(epoch).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-/** Sessions arrive newest-first, so insertion order is already the display order. */
-function groupSessions(sessions: ExplorerSession[], mode: GroupMode): [string, ExplorerSession[]][] {
-  const groups = new Map<string, ExplorerSession[]>();
-
-  for (const session of sessions) {
-    const key = mode === 'time' ? dayKey(session.lastAt) : session.project;
-    const bucket = groups.get(key);
-    if (bucket) {
-      bucket.push(session);
-    } else {
-      groups.set(key, [session]);
-    }
-  }
-
-  return [...groups.entries()];
+function clockLabel(epoch: number): string {
+  return new Date(epoch).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 export function Explorer({ currentFilter, liveObservationCount, selectedId, onSelect }: ExplorerProps) {
+  const [tab, setTab] = useState<TabId>('tree');
   const [mode, setMode] = useState<GroupMode>('time');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const { sessions, pages, isLoading, error, loadSession } = useExplorerTree(currentFilter, liveObservationCount);
+  const [day, setDay] = useState<string | null>(null);
+  const [blockIndex, setBlockIndex] = useState(0);
+  // A nonce rather than just the id: clicking Locate twice on the same block
+  // must re-centre, and an unchanged id would not re-run the effect.
+  const [locate, setLocate] = useState<{ nodeId: string; nonce: number } | null>(null);
+  const [selected, setSelected] = useState<Observation | null>(null);
 
-  // Expansion is keyed by session id and kept outside the data, so the debounced
-  // SSE refetch replaces the tree without collapsing what the user opened.
-  const toggle = useCallback((session: ExplorerSession) => {
-    const key = nodeKey(session);
-    setExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-        void loadSession(session);
-      }
-      return next;
-    });
-  }, [loadSession]);
+  const { data, isLoading, error } = useExplorerDay(currentFilter, day, liveObservationCount);
 
-  const groups = useMemo(() => groupSessions(sessions, mode), [sessions, mode]);
-
-  const selectedRef = useRef<HTMLButtonElement | null>(null);
-
-  const selected: Observation | undefined = useMemo(() => {
-    if (!selectedId) return undefined;
-    const id = Number(selectedId);
-    if (!Number.isFinite(id)) return undefined;
-    for (const page of Object.values(pages)) {
-      const hit = page.items.find(item => item.id === id);
-      if (hit) return hit;
-    }
-    return undefined;
-  }, [selectedId, pages]);
-
-  // A deep link lands before any session is open, so nothing holds the target
-  // observation yet. Ask the server which session owns it, then open that one.
+  // The server decides which day to show when none is pinned; adopt it so the
+  // stepper has somewhere to step from.
   useEffect(() => {
-    if (!selectedId || selected) return;
+    if (!day && data.day) setDay(data.day);
+  }, [data.day, day]);
+
+  const blocks = useMemo(() => splitIntoBlocks(data.observations), [data.observations]);
+
+  useEffect(() => { setBlockIndex(0); }, [data.day, mode]);
+
+  const dayIndex = data.day ? data.days.indexOf(data.day) : -1;
+  const stepDay = useCallback((delta: number) => {
+    const next = data.days[dayIndex + delta];
+    if (next) setDay(next);
+  }, [data.days, dayIndex]);
+
+  const block = blocks[blockIndex];
+  const blockLabel = block
+    ? `${clockLabel(block[0].createdAt)} – ${clockLabel(block[block.length - 1].createdAt)}`
+    : '—';
+
+  const handleLocate = useCallback(() => {
+    if (!data.day || mode !== 'time') return;
+    setLocate(prev => ({ nodeId: `day-${data.day}-b${blockIndex}`, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, [data.day, blockIndex, mode]);
+
+  // Fetch the full row for whatever the URL points at — the graph only carries
+  // labels, and a deep link may name an observation on another day entirely.
+  useEffect(() => {
+    if (!selectedId) { setSelected(null); return; }
     let cancelled = false;
 
     void (async () => {
@@ -91,146 +84,92 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
         if (!response.ok) return;
         const observation = await response.json() as Observation;
         if (cancelled) return;
-        // The tree row is the only place the node's stable key is known, so a
-        // deep link has to be resolved through it rather than opened directly.
-        const owner = sessions.find(s => s.sessionId === observation.memory_session_id);
-        if (!owner) return;
-        setExpanded(prev => new Set(prev).add(nodeKey(owner)));
-        void loadSession(owner);
+        setSelected(observation);
+        const observationDay = new Date(observation.created_at_epoch);
+        const key = [
+          observationDay.getFullYear(),
+          String(observationDay.getMonth() + 1).padStart(2, '0'),
+          String(observationDay.getDate()).padStart(2, '0'),
+        ].join('-');
+        setDay(prev => (prev === key ? prev : key));
       } catch {
-        // A bad id in the URL just leaves the pane empty.
+        // A bad id in the URL just leaves the panel closed.
       }
     })();
 
     return () => { cancelled = true; };
-  }, [selectedId, selected, loadSession, sessions]);
+  }, [selectedId]);
 
-  // A deep link expands a session that may be hundreds of rows down; without
-  // this the highlighted row sits off-screen and the tree looks unresponsive.
-  useEffect(() => {
-    selectedRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [selected?.id, mode]);
+  const currentTab = TABS.find(t => t.id === tab)!;
 
   return (
     <div className="page explorer">
       <header className="page-head">
         <h1 className="page-title">Explorer</h1>
-        <p className="page-subtitle">
-          {currentFilter ? `Project: ${currentFilter}` : 'Across all projects'}
-          {sessions.length > 0 && ` · ${sessions.length} session${sessions.length === 1 ? '' : 's'}`}
-        </p>
+        <p className="page-subtitle">Multi-dimensional view of your memory</p>
       </header>
 
-      <div className="explorer-panes">
-        <div className="explorer-tree" role="tree" aria-label="Sessions">
-          <div className="explorer-modes" role="group" aria-label="Group sessions by">
-            <button
-              type="button"
-              className={`explorer-mode${mode === 'time' ? ' is-active' : ''}`}
-              aria-pressed={mode === 'time'}
-              onClick={() => setMode('time')}
-            >
-              By time
-            </button>
-            <button
-              type="button"
-              className={`explorer-mode${mode === 'project' ? ' is-active' : ''}`}
-              aria-pressed={mode === 'project'}
-              onClick={() => setMode('project')}
-            >
-              By project
-            </button>
-          </div>
+      <div className="explorer-tabs" role="tablist" aria-label="Explorer views">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`explorer-tab${tab === t.id ? ' is-active' : ''}${t.built ? '' : ' is-soon'}`}
+            onClick={() => t.built && setTab(t.id)}
+            disabled={!t.built}
+            title={t.built ? undefined : 'Not built yet'}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-          {isLoading && sessions.length === 0 && (
-            <p className="explorer-note">Loading sessions…</p>
-          )}
-
-          {!isLoading && sessions.length === 0 && (
-            <p className="explorer-note">
-              {error ? `Could not load sessions: ${error}` : 'No sessions recorded yet.'}
-            </p>
-          )}
-
-          {groups.map(([groupLabel, groupSessionList]) => (
-            <section className="explorer-group" key={groupLabel}>
-              <h2 className="explorer-group-label">{groupLabel}</h2>
-
-              {groupSessionList.map(session => {
-                const isOpen = expanded.has(nodeKey(session));
-                const page = pages[nodeKey(session)];
-                const remaining = session.count - (page?.items.length ?? 0);
-
-                return (
-                  <div className="explorer-session" key={session.sessionId}>
-                    <button
-                      type="button"
-                      className="explorer-session-btn"
-                      aria-expanded={isOpen}
-                      onClick={() => toggle(session)}
-                    >
-                      <svg
-                        className={`explorer-caret${isOpen ? ' is-open' : ''}`}
-                        width="14" height="14" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-                        strokeLinejoin="round" aria-hidden="true"
-                      >
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
-                      <span className="explorer-session-text">
-                        <span className="explorer-session-label">{session.label}</span>
-                        <span className="explorer-session-meta">
-                          {session.count} obs · {timeLabel(session.lastAt)}
-                          {mode === 'time' && ` · ${session.project}`}
-                        </span>
-                      </span>
-                    </button>
-
-                    {isOpen && (
-                      <div className="explorer-children" role="group">
-                        {page?.items.map(observation => (
-                          <button
-                            type="button"
-                            key={observation.id}
-                            ref={selected?.id === observation.id ? selectedRef : undefined}
-                            className={`explorer-obs${selected?.id === observation.id ? ' is-selected' : ''}`}
-                            aria-current={selected?.id === observation.id}
-                            onClick={() => onSelect(String(observation.id))}
-                          >
-                            {observation.title || observation.subtitle || `Observation #${observation.id}`}
-                          </button>
-                        ))}
-
-                        {page?.isLoading && <p className="explorer-note">Loading…</p>}
-
-                        {page && !page.isLoading && page.hasMore && (
-                          <button
-                            type="button"
-                            className="explorer-more"
-                            onClick={() => void loadSession(session)}
-                          >
-                            Show more{remaining > 0 ? ` — ${remaining} left` : ''}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
-          ))}
+      <div className="explorer-toolbar">
+        <div className="explorer-stepper">
+          <button type="button" onClick={() => stepDay(-1)} disabled={dayIndex <= 0} aria-label="Previous day">‹</button>
+          <span className="explorer-stepper-value">{data.day ? formatDay(data.day) : '—'}</span>
+          <button type="button" onClick={() => stepDay(1)} disabled={dayIndex < 0 || dayIndex >= data.days.length - 1} aria-label="Next day">›</button>
         </div>
 
-        <div className="explorer-detail">
-          {selected ? (
-            <ObservationCard observation={selected} />
-          ) : (
-            <p className="explorer-note explorer-detail-empty">
-              {selectedId ? 'Loading observation…' : 'Select an observation to read it.'}
-            </p>
-          )}
+        <div className="explorer-stepper">
+          <button type="button" onClick={() => setBlockIndex(i => Math.max(0, i - 1))} disabled={blockIndex <= 0 || mode !== 'time'} aria-label="Previous time block">‹</button>
+          <span className="explorer-stepper-value">{mode === 'time' ? blockLabel : 'all day'}</span>
+          <button type="button" onClick={() => setBlockIndex(i => Math.min(blocks.length - 1, i + 1))} disabled={mode !== 'time' || blockIndex >= blocks.length - 1} aria-label="Next time block">›</button>
+          <button type="button" className="explorer-locate" onClick={handleLocate} disabled={mode !== 'time' || !block}>Locate</button>
+        </div>
+
+        <div className="explorer-modes" role="group" aria-label="Group by">
+          <button type="button" className={`explorer-mode${mode === 'time' ? ' is-active' : ''}`} aria-pressed={mode === 'time'} onClick={() => setMode('time')}>By Time</button>
+          <button type="button" className={`explorer-mode${mode === 'app' ? ' is-active' : ''}`} aria-pressed={mode === 'app'} onClick={() => setMode('app')}>By Project</button>
         </div>
       </div>
+
+      {!currentTab.built ? (
+        <div className="tree-graph-empty">{currentTab.label} is not built yet.</div>
+      ) : isLoading && data.observations.length === 0 ? (
+        <div className="tree-graph-empty">Loading…</div>
+      ) : error && data.observations.length === 0 ? (
+        <div className="tree-graph-empty">Could not load: {error}</div>
+      ) : data.day ? (
+        <TreeGraph
+          day={data.day}
+          observations={data.observations}
+          mode={mode}
+          selectedId={selected?.id}
+          onSelect={id => onSelect(String(id))}
+          locate={locate}
+        />
+      ) : (
+        <div className="tree-graph-empty">No observations recorded yet.</div>
+      )}
+
+      {selected && (
+        <aside className="explorer-detail-panel" aria-label="Selected observation">
+          <button type="button" className="explorer-detail-close" onClick={() => onSelect(undefined)} aria-label="Close">×</button>
+          <ObservationCard observation={selected} />
+        </aside>
+      )}
     </div>
   );
 }

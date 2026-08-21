@@ -1,99 +1,79 @@
 ---
 title: "Viewer Explorer"
-description: "A two-pane tree of every session and the observations under it, walkable by time or by project"
+description: "A node-link tree of one day's memory, walkable by time or by project"
 ---
 
 ## What it is
 
-The Explorer tab in the viewer (`http://localhost:37701/#/explorer`) shows your
-memory as a tree — sessions on the left, the selected observation on the right.
-It answers "what happened in that session" in a way the Recall feed cannot: the
-feed is one flat stream, so a session's observations are scattered through it.
+The Explorer tab in the viewer (`http://localhost:37701/#/explorer`) draws one
+day of memory as a tree: the day at the root, branching down through activity
+to the individual observations along the bottom. It answers "what did that day
+actually consist of" in a way the Recall feed cannot — the feed is one flat
+stream, so the shape of a day is invisible in it.
+
+## The five tiers
+
+```mermaid
+flowchart TD
+  D["day<br/><i>2026-07-14</i>"] --> B["time block<br/><i>22:09 – 22:24</i>"]
+  B --> S["session<br/><i>titled by its first observation</i>"]
+  S --> P["prompt<br/><i>prompt_number</i>"]
+  P --> O["observation<br/><i>one leaf per row</i>"]
+```
+
+A **time block** is a run of activity with no gap longer than 30 minutes. Blocks
+are found in a single pass over the day because the server returns the day
+ordered oldest-first.
+
+Switching to **By Project** replaces only the second tier — the project takes
+the block's place and everything below is unchanged. It is the same data
+regrouped, not a second request.
 
 ## Where the data comes from
 
-Session counts are computed in SQL, not by grouping a page of the feed. The
-viewer only ever holds the first page of observations, so counting client-side
-would report "34 so far" instead of 34.
+`GET /api/explorer/day?day=&project=` returns three things: every day that has
+observations (so the date stepper knows its neighbours), the day being shown,
+and that day's observations projected down to what the graph draws — id, title,
+session, prompt number, timestamp.
 
-```mermaid
-flowchart TD
-  A["open #/explorer"] --> B["GET /api/sessions/tree"]
-  B --> C["GROUP BY memory_session_id in SQLite"]
-  C --> D["one node per session: label, count, firstAt, lastAt"]
-  D --> E["group client-side into by-time or by-project"]
-  E --> F["render the tree"]
-  F --> G{"user expands a session?"}
-  G -- yes --> H["GET /api/observations?session=&lt;id&gt;&amp;limit=100"]
-  H --> I["cache the page under that session id"]
-  I --> J{"hasMore?"}
-  J -- yes --> K["Show more re-requests at the next offset"]
-  J -- no --> L["node is fully loaded"]
-  F --> M{"SSE new_observation?"}
-  M -- yes --> N["debounce 1s, refetch the tree"]
-  N --> D
-```
+The narrative and text columns are deliberately left out. The graph paints a few
+hundred nodes and only needs their labels; the detail panel fetches the full row
+for the one observation that gets selected.
 
-The SSE path refetches rather than merging the event into the tree. A node
-carries a count, not the ids behind it, so there is no way to tell a live
-observation apart from one already counted — merging would double-count it.
+A live observation arriving over SSE refetches the day after a one second
+debounce, for the same reason the counts are computed server-side: the client
+holds a projection, not the source of truth.
 
-## Why nodes are keyed by content session
+## Why the session tier is keyed by content session
 
 When a content session continues, the worker issues it a fresh
 `memory_session_id`, rewrites that session's existing observations onto the new
-id, and drops the old one — the session row itself is reused, so the session
-count does not change. Anything the viewer remembers about a node therefore
-cannot be keyed on `memory_session_id`: the moment a new observation lands in
-an open session, the node it was keyed to no longer exists and the node
-collapses.
+id, and drops the old one — the session row itself is reused. Anything that
+remembers a session across a refetch therefore cannot be keyed on
+`memory_session_id`; it stops existing the moment new work lands in that
+session. The graph groups its session tier on `contentSessionId`, which survives
+the rotation.
 
-Expansion and page caches are keyed on `contentSessionId`, which survives that
-rotation. `memory_session_id` is still what the observation query filters on,
-since that is the column observations carry. Deep links are unaffected —
-observation ids do not rotate.
+## Reading the graph
 
-If a refetch shows a different count for a node whose children are open, that
-node's cached page is reloaded, so the header and the rows cannot disagree.
+- Node size and colour mark the tier: the day is the largest, observations are
+  the small dots along the baseline.
+- Hovering any node names it and gives its observation count.
+- Clicking an observation opens it below the canvas and writes it into the URL
+  as `#/explorer/<id>`, so the link survives a refresh and can be shared.
+  Opening such a link cold switches to that observation's day first.
+- Leaf labels are set on an angle because hundreds of them share one baseline.
 
-## Two views of one fetch
+## Toolbar
 
-The `By time` / `By project` toggle re-groups the same session list. It costs no
-extra request.
+- **Tree / Digest / Activity** — only Tree is built; the other two are marked
+  and disabled rather than hidden.
+- **Day stepper** — moves between days that actually have observations, so it
+  never lands on an empty one.
+- **Time block stepper and Locate** — steps through the day's blocks and scrolls
+  the canvas to centre the current one. Inactive under By Project, which has no
+  time blocks.
+- **By Time / By Project** — swaps the second tier.
 
-```mermaid
-flowchart TD
-  R["GET /api/sessions/tree — one response<br/>abc · 34 obs · 15 Jul · max<br/>def · 16 obs · 15 Jul · other-project<br/>ghi · 8 obs · 14 Jul · max"]
-  R --> T["By time"]
-  R --> P["By project"]
-  T --> T1["15 Jul<br/>abc, def"]
-  T --> T2["14 Jul<br/>ghi"]
-  P --> P1["max<br/>abc, ghi"]
-  P --> P2["other-project<br/>def"]
-```
-
-## Session labels
-
-A session id is a UUID, so the tree labels each node by falling back through
-three sources:
-
-1. `sdk_sessions.custom_title`, when one was set
-2. the title of the session's oldest observation
-3. `Session <first six characters of the id>`
-
-The session's own `user_prompt` is deliberately not used — every `/doctor` run
-produces an identical prompt, so those sessions would be indistinguishable.
-
-## Deep links
-
-Selecting an observation writes it into the URL as `#/explorer/<id>`. Opening
-that link directly asks the server which session owns the observation, expands
-that session, and scrolls the row into view — so a link survives a refresh and
-can be shared.
-
-## Project filter
-
-The tree honours the header's project selector and scopes exactly like the
-Recall feed does, matching `project` or `merged_into_project` and hiding the
-internal observer-sessions project when no filter is set. A tree that scoped
-projects differently from the feed would disagree with it on the same filter.
+The canvas fits the whole day's width where it can. Past the point where the
+leaf dots would touch it stops shrinking and scrolls instead.
