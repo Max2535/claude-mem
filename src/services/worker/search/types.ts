@@ -44,17 +44,31 @@ export interface ExtendedSearchOptions extends SearchOptions {
   format?: 'text' | 'json';
 }
 
-export type SearchStrategyHint = 'chroma' | 'sqlite' | 'hybrid' | 'auto';
+export type SearchStrategyHint = 'chroma' | 'sqlite' | 'hybrid' | 'vectorless' | 'auto';
 
 export interface StrategySearchOptions extends ExtendedSearchOptions {
   query?: string;
   strategyHint?: SearchStrategyHint;
 }
 
+export interface SourceCoverage {
+  indexed: Record<string, number>;
+  matched: Record<string, number>;
+}
+
+export interface TraversalTrace {
+  rounds: number;
+  daysWalked: string[];
+  sessionsWalked: string[];
+  indexRows: number;
+}
+
 export interface StrategySearchResult {
   results: SearchResults;
   usedChroma: boolean;
   strategy: SearchStrategyHint;
+  coverage?: SourceCoverage;
+  traversal?: TraversalTrace;
 }
 
 export interface CombinedResult {
