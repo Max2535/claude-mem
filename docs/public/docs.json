@@ -110,6 +110,7 @@
           "architecture/worker-service",
           "architecture/database",
           "architecture/search-architecture",
+          "architecture/viewer-explorer-dag",
           "architecture/pm2-to-bun-migration"
         ]
       }

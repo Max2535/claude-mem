@@ -1,0 +1,97 @@
+---
+title: "Explorer Dependency Graph"
+description: "Every module and endpoint the viewer's Explorer tab depends on, as a directed acyclic graph"
+---
+
+The [Explorer tab](/usage/viewer-explorer) spans the React viewer, the worker's
+HTTP layer, and SQLite. Below is every edge between them, taken from the actual
+`import` statements and route registrations rather than drawn from memory.
+
+The whole graph is acyclic with a single root, `App.tsx`. It is split in two
+here only so the labels stay readable — the three HTTP endpoints are the seam,
+appearing as leaves in the first graph and roots in the second.
+
+Blue nodes were added for Explorer, amber nodes already existed and were
+modified, grey nodes are used unchanged.
+
+## Viewer side
+
+```mermaid
+flowchart LR
+  classDef new fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef touched fill:#fef3c7,stroke:#d97706,color:#5a3d00
+  classDef existing fill:#f1f5f9,stroke:#94a3b8,color:#334155
+
+  App["App.tsx"]:::touched
+  Route["useRoute.ts"]:::touched
+  Nav["constants/nav.ts"]:::touched
+  Exp["Explorer.tsx"]:::new
+  Hook["useExplorerTree.ts"]:::new
+  Card["ObservationCard.tsx"]:::existing
+  Types["viewer/types.ts"]:::touched
+  Api["constants/api.ts"]:::existing
+  E1(["/api/sessions/tree"]):::new
+  E2(["/api/observations?session="]):::touched
+  E3(["/api/observation/:id"]):::existing
+
+  App --> Route
+  App --> Nav
+  App --> Exp
+  Route --> Nav
+  Exp --> Card
+  Exp --> Types
+  Exp --> Hook
+  Exp --> E3
+  Hook --> Api
+  Hook --> Types
+  Hook --> E1
+  Hook --> E2
+```
+
+## Worker side
+
+```mermaid
+flowchart TD
+  classDef new fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef touched fill:#fef3c7,stroke:#d97706,color:#5a3d00
+  classDef existing fill:#f1f5f9,stroke:#94a3b8,color:#334155
+
+  E1(["/api/sessions/tree"]):::new
+  E2(["/api/observations?session="]):::touched
+  E3(["/api/observation/:id"]):::existing
+  DR["DataRoutes.ts"]:::touched
+  PH["PaginationHelper.ts"]:::touched
+  WT["worker-types.ts"]:::touched
+  DB["DatabaseManager to SessionStore"]:::existing
+  SQL[("SQLite: observations, sdk_sessions")]:::existing
+
+  E1 --> DR
+  E2 --> DR
+  E3 --> DR
+  DR --> PH
+  PH --> WT
+  PH --> DB
+  DB --> SQL
+```
+
+## What the shape tells you
+
+**Three endpoints converge on `DataRoutes.ts`.** It is the single place where a
+change to how sessions are scoped or paginated can break the tree, and it is
+the file to read first when the tree disagrees with the Recall feed — both go
+through it.
+
+**`GET /api/observation/:id` hangs off `Explorer.tsx` directly**, not off
+`useExplorerTree.ts` like the other two. That edge exists only for deep links:
+opening `#/explorer/<id>` cold means nothing has loaded the observation yet, so
+the component asks which session owns it before any session can be expanded.
+
+**`ExplorerSession` appears twice** — once in `services/worker-types.ts` and
+once in `viewer/types.ts`. The viewer's `tsconfig.json` pins `rootDir` to the
+viewer directory, so it cannot import the worker's type; the two declarations
+must be edited together.
+
+**Nothing points back up.** No worker module imports a viewer module and no
+hook imports a component, which is what keeps the graph acyclic. A new edge
+that violates this — a shared helper importing `App.tsx`, say — would introduce
+a cycle and should be split instead.
