@@ -32,8 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
     id: 'explorer',
     label: 'Explorer',
     icon: 'M12 3v6m0 0-5 4m5-4 5 4M7 13v4m10-4v4M4 20h6m4 0h6',
-    built: false,
-    planned: 'A tree view of sessions and the observations under them, walkable by time or by project.',
+    built: true,
   },
   {
     id: 'chat',

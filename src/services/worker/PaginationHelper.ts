@@ -4,7 +4,7 @@ import { DatabaseManager } from './DatabaseManager.js';
 import { logger } from '../../utils/logger.js';
 import { OBSERVER_SESSIONS_PROJECT } from '../../shared/paths.js';
 import { USER_PROMPT_DEDUPE_WINDOW_MS } from '../../shared/user-prompts.js';
-import type { PaginatedResult, Observation, Summary, UserPrompt } from '../worker-types.js';
+import type { PaginatedResult, Observation, Summary, UserPrompt, ExplorerSession } from '../worker-types.js';
 
 export class PaginationHelper {
   private dbManager: DatabaseManager;
@@ -52,7 +52,7 @@ export class PaginationHelper {
     };
   }
 
-  getObservations(offset: number, limit: number, project?: string, platformSource?: string): PaginatedResult<Observation> {
+  getObservations(offset: number, limit: number, project?: string, platformSource?: string, sessionId?: string): PaginatedResult<Observation> {
     const db = this.dbManager.getSessionStore().db;
     let query = `
       SELECT
@@ -90,6 +90,10 @@ export class PaginationHelper {
       conditions.push(`COALESCE(s.platform_source, 'claude') = ?`);
       params.push(platformSource);
     }
+    if (sessionId) {
+      conditions.push('o.memory_session_id = ?');
+      params.push(sessionId);
+    }
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
@@ -109,6 +113,67 @@ export class PaginationHelper {
       ...result,
       items: result.items.map(obs => this.sanitizeObservation(obs))
     };
+  }
+
+  /**
+   * One row per session for the Explorer tree. Counting in SQL rather than
+   * grouping a paginated observation feed client-side keeps the counts honest
+   * on a database the viewer has only read the first page of.
+   */
+  getSessionTree(project?: string, platformSource?: string): ExplorerSession[] {
+    const db = this.dbManager.getSessionStore().db;
+
+    // The label falls back through custom_title -> oldest observation title ->
+    // a short id, because custom_title is usually empty and the session's own
+    // user_prompt collides across sessions (every `/doctor` run looks alike).
+    let query = `
+      SELECT
+        o.memory_session_id as sessionId,
+        COALESCE(s.project, MIN(o.project)) as project,
+        COALESCE(
+          NULLIF(s.custom_title, ''),
+          (
+            SELECT o2.title FROM observations o2
+            WHERE o2.memory_session_id = o.memory_session_id AND o2.title IS NOT NULL
+            ORDER BY o2.created_at_epoch ASC LIMIT 1
+          ),
+          'Session ' || SUBSTR(o.memory_session_id, 1, 6)
+        ) as label,
+        COUNT(*) as count,
+        MIN(o.created_at_epoch) as firstAt,
+        MAX(o.created_at_epoch) as lastAt
+      FROM observations o
+      LEFT JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id
+    `;
+    const params: SQLQueryBindings[] = [];
+    const conditions: string[] = [];
+
+    // Mirrors getObservations() exactly: a tree that scoped projects
+    // differently from the feed would disagree with it on the same filter.
+    if (project) {
+      conditions.push('(o.project = ? OR o.merged_into_project = ?)');
+      params.push(project, project);
+    } else {
+      conditions.push('o.project != ?');
+      params.push(OBSERVER_SESSIONS_PROJECT);
+    }
+    if (platformSource) {
+      conditions.push(`COALESCE(s.platform_source, 'claude') = ?`);
+      params.push(platformSource);
+    }
+
+    query += ` WHERE ${conditions.join(' AND ')}`;
+    query += ' GROUP BY o.memory_session_id ORDER BY lastAt DESC';
+
+    const sessions = db.prepare(query).all(...params) as ExplorerSession[];
+
+    logger.debug('WORKER', 'PaginationHelper: built session tree', {
+      sessions: sessions.length,
+      project,
+      platformSource,
+    });
+
+    return sessions;
   }
 
   getSummaries(offset: number, limit: number, project?: string, platformSource?: string): PaginatedResult<Summary> {

@@ -2842,6 +2842,178 @@
       min-height: 0;
     }
 
+    /* Explorer: the tree scrolls on its own, so the page itself must not. */
+    .explorer {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .explorer-panes {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(260px, 340px) 1fr;
+      gap: 20px;
+    }
+
+    .explorer-tree,
+    .explorer-detail {
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .explorer-tree {
+      padding-right: 4px;
+    }
+
+    .explorer-modes {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 14px;
+      padding: 3px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-secondary);
+    }
+
+    .explorer-mode {
+      flex: 1;
+      padding: 6px 10px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .explorer-mode:hover {
+      color: var(--color-text-primary);
+    }
+
+    .explorer-mode.is-active {
+      background: var(--color-bg-card);
+      color: var(--color-text-primary);
+      font-weight: 600;
+    }
+
+    .explorer-group {
+      margin-bottom: 18px;
+    }
+
+    .explorer-group-label {
+      margin-bottom: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+
+    .explorer-session-btn {
+      width: 100%;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 8px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text-primary);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .explorer-session-btn:hover {
+      background: var(--color-bg-card-hover);
+    }
+
+    .explorer-caret {
+      flex-shrink: 0;
+      margin-top: 3px;
+      color: var(--color-text-muted);
+      transition: transform 0.15s ease;
+    }
+
+    .explorer-caret.is-open {
+      transform: rotate(90deg);
+    }
+
+    .explorer-session-text {
+      min-width: 0;
+    }
+
+    .explorer-session-label {
+      display: block;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .explorer-session-meta {
+      display: block;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    /* Indented to the caret so the hierarchy reads without guide lines. */
+    .explorer-children {
+      margin: 2px 0 6px 15px;
+      padding-left: 9px;
+      border-left: 1px solid var(--color-border-secondary);
+    }
+
+    .explorer-obs {
+      display: block;
+      width: 100%;
+      padding: 5px 8px;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font: inherit;
+      font-size: 12.5px;
+      line-height: 1.35;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .explorer-obs:hover {
+      background: var(--color-bg-card-hover);
+      color: var(--color-text-primary);
+    }
+
+    .explorer-obs.is-selected {
+      background: var(--color-bg-observation);
+      color: var(--color-text-primary);
+      font-weight: 600;
+    }
+
+    .explorer-more {
+      margin-top: 2px;
+      padding: 5px 8px;
+      border: none;
+      background: transparent;
+      color: var(--color-accent-primary);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .explorer-note {
+      padding: 8px;
+      font-size: 12.5px;
+      color: var(--color-text-muted);
+    }
+
+    .explorer-detail-empty {
+      padding-top: 32px;
+      text-align: center;
+    }
     @media (max-width: 768px) {
       .sidebar {
         width: 60px;
@@ -2870,6 +3042,31 @@
 
       .page {
         padding: 20px 16px 40px;
+      }
+
+      /* Two panes do not fit, so drop the side-by-side machinery entirely and
+         let Explorer be an ordinary scrolling page. Keeping the flex column
+         here pins the panes to the viewport height while their content spills
+         past it, stranding a tall observation card with nothing able to
+         scroll to it. */
+      .explorer {
+        display: block;
+        overflow-y: auto;
+      }
+
+      .explorer-panes {
+        display: block;
+      }
+
+      /* The tree keeps its own scroller so a long session list cannot push the
+         detail pane off the bottom of the page. */
+      .explorer-tree {
+        max-height: 45vh;
+      }
+
+      .explorer-detail {
+        margin-top: 20px;
+        overflow-y: visible;
       }
     }
 

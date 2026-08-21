@@ -59,6 +59,16 @@ export interface StreamEvent {
   queueDepth?: number;
 }
 
+/** One node of GET /api/sessions/tree. */
+export interface ExplorerSession {
+  sessionId: string;
+  project: string;
+  label: string;
+  count: number;
+  firstAt: number;
+  lastAt: number;
+}
+
 /** Shape of GET /api/stats. */
 export interface WorkerStats {
   worker: {

@@ -104,6 +104,16 @@ export interface PaginatedResult<T> {
   limit: number;
 }
 
+/** One node of the Explorer tree: a session, summarised. */
+export interface ExplorerSession {
+  sessionId: string;
+  project: string;
+  label: string;
+  count: number;
+  firstAt: number;
+  lastAt: number;
+}
+
 export interface ViewerSettings {
   sidebarOpen: boolean;
   selectedProject: string | null;

@@ -86,6 +86,7 @@ export class DataRoutes extends BaseRouteHandler {
 
     app.get('/api/observation/:id', this.handleGetObservationById.bind(this));
     app.get('/api/observations/by-file', this.handleGetObservationsByFile.bind(this));
+    app.get('/api/sessions/tree', this.handleGetSessionTree.bind(this));
     app.post('/api/observations/batch', validateBody(observationsBatchSchema), this.handleGetObservationsByIds.bind(this));
     app.get('/api/session/:id', this.handleGetSessionById.bind(this));
     app.post('/api/sdk-sessions/batch', validateBody(sdkSessionsBatchSchema), this.handleGetSdkSessionsByIds.bind(this));
@@ -104,8 +105,15 @@ export class DataRoutes extends BaseRouteHandler {
 
   private handleGetObservations = this.wrapHandler((req: Request, res: Response): void => {
     const { offset, limit, project, platformSource } = this.parsePaginationParams(req);
-    const result = this.paginationHelper.getObservations(offset, limit, project, platformSource);
+    const sessionId = DataRoutes.firstString(req.query.session);
+    const result = this.paginationHelper.getObservations(offset, limit, project, platformSource, sessionId);
     res.json(result);
+  });
+
+  private handleGetSessionTree = this.wrapHandler((req: Request, res: Response): void => {
+    const project = DataRoutes.firstString(req.query.project);
+    const platformSource = this.getOptionalPlatformSourceFromRequest(req);
+    res.json({ sessions: this.paginationHelper.getSessionTree(project, platformSource) });
   });
 
   private handleGetSummaries = this.wrapHandler((req: Request, res: Response): void => {

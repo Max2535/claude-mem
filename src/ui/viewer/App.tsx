@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { ComingSoon } from './components/ComingSoon';
 import { Feed } from './components/Feed';
+import { Explorer } from './components/Explorer';
 import { ContextSettingsModal } from './components/ContextSettingsModal';
 import { LogsDrawer } from './components/LogsModal';
 import { WelcomeCard, getStoredWelcomeDismissed, setStoredWelcomeDismissed } from './components/WelcomeCard';
@@ -30,7 +31,7 @@ export function App() {
   const { settings, saveSettings, isSaving, saveStatus } = useSettings();
   const { preference, setThemePreference } = useTheme();
   const pagination = usePagination(currentFilter);
-  const [route, navigate] = useRoute();
+  const [route, routeTail, navigate] = useRoute();
   const { stats, error: statsError } = useStats();
 
   const matchesSelection = useCallback((item: { project: string }) => {
@@ -145,6 +146,15 @@ export function App() {
               onLoadMore={handleLoadMore}
               isLoading={pagination.observations.isLoading || pagination.summaries.isLoading || pagination.prompts.isLoading}
               hasMore={pagination.observations.hasMore || pagination.summaries.hasMore || pagination.prompts.hasMore}
+            />
+          )}
+
+          {route === 'explorer' && (
+            <Explorer
+              currentFilter={currentFilter}
+              liveObservationCount={observations.length}
+              selectedId={routeTail}
+              onSelect={id => navigate('explorer', id)}
             />
           )}
 
