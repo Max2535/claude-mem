@@ -39,6 +39,7 @@
           "usage/openrouter-provider",
           "usage/gemini-provider",
           "usage/search-tools",
+          "usage/viewer-explorer",
           "usage/vectorless-retrieval",
           "usage/knowledge-agents",
           "usage/claude-desktop",

@@ -1,0 +1,83 @@
+---
+title: "Viewer Explorer"
+description: "A two-pane tree of every session and the observations under it, walkable by time or by project"
+---
+
+## What it is
+
+The Explorer tab in the viewer (`http://localhost:37701/#/explorer`) shows your
+memory as a tree — sessions on the left, the selected observation on the right.
+It answers "what happened in that session" in a way the Recall feed cannot: the
+feed is one flat stream, so a session's observations are scattered through it.
+
+## Where the data comes from
+
+Session counts are computed in SQL, not by grouping a page of the feed. The
+viewer only ever holds the first page of observations, so counting client-side
+would report "34 so far" instead of 34.
+
+```mermaid
+flowchart TD
+  A["open #/explorer"] --> B["GET /api/sessions/tree"]
+  B --> C["GROUP BY memory_session_id in SQLite"]
+  C --> D["one node per session: label, count, firstAt, lastAt"]
+  D --> E["group client-side into by-time or by-project"]
+  E --> F["render the tree"]
+  F --> G{"user expands a session?"}
+  G -- yes --> H["GET /api/observations?session=&lt;id&gt;&amp;limit=100"]
+  H --> I["cache the page under that session id"]
+  I --> J{"hasMore?"}
+  J -- yes --> K["Show more re-requests at the next offset"]
+  J -- no --> L["node is fully loaded"]
+  F --> M{"SSE new_observation?"}
+  M -- yes --> N["debounce 1s, refetch the tree"]
+  N --> D
+```
+
+The SSE path refetches rather than merging the event into the tree. A node
+carries a count, not the ids behind it, so there is no way to tell a live
+observation apart from one already counted — merging would double-count it.
+Expanded nodes and the current selection live outside the fetched data, so a
+refetch does not collapse what you opened.
+
+## Two views of one fetch
+
+The `By time` / `By project` toggle re-groups the same session list. It costs no
+extra request.
+
+```mermaid
+flowchart TD
+  R["GET /api/sessions/tree — one response<br/>abc · 34 obs · 15 Jul · max<br/>def · 16 obs · 15 Jul · other-project<br/>ghi · 8 obs · 14 Jul · max"]
+  R --> T["By time"]
+  R --> P["By project"]
+  T --> T1["15 Jul<br/>abc, def"]
+  T --> T2["14 Jul<br/>ghi"]
+  P --> P1["max<br/>abc, ghi"]
+  P --> P2["other-project<br/>def"]
+```
+
+## Session labels
+
+A session id is a UUID, so the tree labels each node by falling back through
+three sources:
+
+1. `sdk_sessions.custom_title`, when one was set
+2. the title of the session's oldest observation
+3. `Session <first six characters of the id>`
+
+The session's own `user_prompt` is deliberately not used — every `/doctor` run
+produces an identical prompt, so those sessions would be indistinguishable.
+
+## Deep links
+
+Selecting an observation writes it into the URL as `#/explorer/<id>`. Opening
+that link directly asks the server which session owns the observation, expands
+that session, and scrolls the row into view — so a link survives a refresh and
+can be shared.
+
+## Project filter
+
+The tree honours the header's project selector and scopes exactly like the
+Recall feed does, matching `project` or `merged_into_project` and hiding the
+internal observer-sessions project when no filter is set. A tree that scoped
+projects differently from the feed would disagree with it on the same filter.
