@@ -540,6 +540,26 @@ NEVER fetch full details without filtering first. 10x token savings.`,
     }
   },
   {
+    name: 'temporal_search',
+    description: 'Cross-temporal memory search (vectorless): walks the day/session index across a date range in one LLM pass — good when the answer spans multiple days or branches and embedding top-k would miss it. Returns matched observations plus a per-source coverage breakdown (claude, codex, cursor, browser, docs, slack, ...). Requires CLAUDE_MEM_VECTORLESS_ENABLED=true. Params: query (required), dateStart, dateEnd, project, platformSource, limit',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'What to find across time' },
+        dateStart: { type: 'string', description: 'Start date filter (ISO)' },
+        dateEnd: { type: 'string', description: 'End date filter (ISO)' },
+        project: { type: 'string', description: 'Filter by project name' },
+        platformSource: { type: 'string', description: 'Filter by platform source (e.g. claude, codex, cursor)' },
+        limit: { type: 'number', description: 'Max observations returned (default 20)' }
+      },
+      required: ['query'],
+      additionalProperties: true
+    },
+    handler: async (args: any) => {
+      return await callWorker('/api/search/temporal', { query: args });
+    }
+  },
+  {
     name: 'get_observations',
     description: 'Step 3: Fetch full details for filtered IDs. Params: ids (array of observation IDs, required), orderBy, limit, project',
     inputSchema: {

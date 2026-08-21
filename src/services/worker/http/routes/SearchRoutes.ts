@@ -119,7 +119,7 @@ export class SearchRoutes extends BaseRouteHandler {
     // endpoint name (OUR route segment, bounded to a known enum), outcome, and
     // latency — never query text (see docs/public/telemetry.mdx).
     const KNOWN_SEARCH_ENDPOINTS = new Set([
-      'unified', 'observations', 'by-file',
+      'unified', 'observations', 'by-file', 'temporal',
     ]);
     app.use('/api/search', (req: Request, res: Response, next: express.NextFunction) => {
       const searchStartedAt = Date.now();
@@ -148,6 +148,7 @@ export class SearchRoutes extends BaseRouteHandler {
 
     app.get('/api/search/observations', this.handleSearchObservations.bind(this));
     app.get('/api/search/by-file', this.handleSearchByFile.bind(this));
+    app.get('/api/search/temporal', this.handleTemporalSearch.bind(this));
 
     app.get('/api/context/recent', this.handleGetRecentContext.bind(this));
     app.get('/api/context/preview', this.handleContextPreview.bind(this));
@@ -176,6 +177,11 @@ export class SearchRoutes extends BaseRouteHandler {
 
   private handleSearchObservations = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
     const result = await this.searchManager.searchObservations(this.queryWithPlatformSource(req));
+    res.json(result);
+  });
+
+  private handleTemporalSearch = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
+    const result = await this.searchManager.temporalSearch(this.queryWithPlatformSource(req));
     res.json(result);
   });
 
