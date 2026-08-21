@@ -1,0 +1,87 @@
+import type { SessionSearch } from '../../../sqlite/SessionSearch.js';
+import type { StrategySearchOptions, StrategySearchResult, ObservationSearchResult } from '../types.js';
+import { SEARCH_CONSTANTS } from '../types.js';
+import { buildDayIndex, renderDayIndex, renderObservationIndex, dayOf } from '../vectorless/IndexBuilder.js';
+import { TraversalAgent, type LlmFn } from '../vectorless/TraversalAgent.js';
+import { computeSourceCoverage } from '../vectorless/coverage.js';
+import { logger } from '../../../../utils/logger.js';
+
+export interface VectorlessConfig {
+  maxIndexRows: number;
+  maxDays: number;
+}
+
+export class VectorlessSearchStrategy {
+  constructor(
+    private sessionSearch: SessionSearch,
+    private llm: LlmFn,
+    private config: VectorlessConfig
+  ) {}
+
+  async search(options: StrategySearchOptions): Promise<StrategySearchResult> {
+    const {
+      query,
+      limit = SEARCH_CONSTANTS.DEFAULT_LIMIT,
+      project,
+      platformSource,
+      dateRange,
+    } = options;
+
+    // Index is rebuilt from SQLite per query — nothing persisted, so it cannot go stale.
+    const indexRows: ObservationSearchResult[] = this.sessionSearch.searchObservations(undefined, {
+      project,
+      platformSource,
+      dateRange,
+      limit: this.config.maxIndexRows,
+      orderBy: 'date_desc',
+    });
+
+    const empty: StrategySearchResult = {
+      results: { observations: [], sessions: [], prompts: [] },
+      usedChroma: false,
+      strategy: 'vectorless',
+      coverage: computeSourceCoverage(indexRows, []),
+      traversal: { rounds: 0, daysWalked: [], sessionsWalked: [], indexRows: indexRows.length },
+    };
+    if (!query || indexRows.length === 0) return empty;
+
+    const agent = new TraversalAgent(this.llm);
+    const days = buildDayIndex(indexRows);
+
+    let rounds: number;
+    let walkedDays: string[];
+    let candidates: ObservationSearchResult[];
+    if (days.length > this.config.maxDays) {
+      rounds = 2;
+      walkedDays = await agent.selectDays(query, renderDayIndex(days), this.config.maxDays);
+      const daySet = new Set(walkedDays);
+      candidates = indexRows.filter(r => daySet.has(dayOf(r)));
+    } else {
+      rounds = 1;
+      walkedDays = days.map(d => d.day);
+      candidates = indexRows;
+    }
+
+    if (candidates.length === 0) {
+      logger.debug('SEARCH', 'VectorlessSearchStrategy: day selection produced no candidates', {});
+      return { ...empty, traversal: { rounds, daysWalked: walkedDays, sessionsWalked: [], indexRows: indexRows.length } };
+    }
+
+    const ids = await agent.selectObservations(query, renderObservationIndex(candidates), limit);
+    const byId = new Map(candidates.map(r => [r.id, r]));
+    const matched = ids.map(id => byId.get(id)).filter((r): r is ObservationSearchResult => r !== undefined);
+
+    return {
+      results: { observations: matched, sessions: [], prompts: [] },
+      usedChroma: false,
+      strategy: 'vectorless',
+      coverage: computeSourceCoverage(indexRows, matched),
+      traversal: {
+        rounds,
+        daysWalked: walkedDays,
+        sessionsWalked: [...new Set(matched.map(r => r.memory_session_id))],
+        indexRows: indexRows.length,
+      },
+    };
+  }
+}

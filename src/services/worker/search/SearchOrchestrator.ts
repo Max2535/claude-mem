@@ -6,6 +6,7 @@ import { ChromaSync } from '../../sync/ChromaSync.js';
 import { ChromaSearchStrategy } from './strategies/ChromaSearchStrategy.js';
 import { SQLiteSearchStrategy } from './strategies/SQLiteSearchStrategy.js';
 import { HybridSearchStrategy } from './strategies/HybridSearchStrategy.js';
+import { VectorlessSearchStrategy } from './strategies/VectorlessSearchStrategy.js';
 
 import type {
   StrategySearchOptions,
@@ -30,7 +31,8 @@ export class SearchOrchestrator {
   constructor(
     private sessionSearch: SessionSearch,
     private sessionStore: SessionStore,
-    private chromaSync: ChromaSync | null
+    private chromaSync: ChromaSync | null,
+    private vectorlessStrategy: VectorlessSearchStrategy | null = null
   ) {
     this.sqliteStrategy = new SQLiteSearchStrategy(sessionSearch);
 
@@ -52,6 +54,17 @@ export class SearchOrchestrator {
     if (!options.query) {
       logger.debug('SEARCH', 'Orchestrator: Filter-only query, using SQLite', {});
       return await this.sqliteStrategy.search(options);
+    }
+
+    if (options.strategyHint === 'vectorless' && this.vectorlessStrategy) {
+      logger.debug('SEARCH', 'Orchestrator: Using vectorless traversal search', {});
+      try {
+        return await this.vectorlessStrategy.search(options);
+      } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        logger.error('WORKER', 'Orchestrator: Vectorless search failed, falling back to SQLite', {}, errorObj);
+        return await this.sqliteStrategy.search(options);
+      }
     }
 
     if (this.chromaStrategy) {
