@@ -59,6 +59,25 @@ export interface StreamEvent {
   queueDepth?: number;
 }
 
+/** Shape of GET /api/stats. */
+export interface WorkerStats {
+  worker: {
+    version: string;
+    uptime: number;
+    activeSessions: number;
+    sseClients: number;
+    port: number;
+  };
+  database: {
+    path: string;
+    size: number;
+    observations: number;
+    sessions: number;
+    summaries: number;
+    firstObservationAt: string | null;
+  };
+}
+
 export interface ProjectCatalog {
   projects: string[];
   sources: string[];

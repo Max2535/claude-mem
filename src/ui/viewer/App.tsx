@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { Dashboard } from './components/Dashboard';
+import { ComingSoon } from './components/ComingSoon';
 import { Feed } from './components/Feed';
 import { ContextSettingsModal } from './components/ContextSettingsModal';
 import { LogsDrawer } from './components/LogsModal';
@@ -8,6 +11,9 @@ import { useSSE } from './hooks/useSSE';
 import { useSettings } from './hooks/useSettings';
 import { usePagination } from './hooks/usePagination';
 import { useTheme } from './hooks/useTheme';
+import { useRoute } from './hooks/useRoute';
+import { useStats } from './hooks/useStats';
+import { NAV_ITEMS } from './constants/nav';
 import { Observation, Summary, UserPrompt } from './types';
 import { mergeAndDeduplicateByProject } from './utils/data';
 
@@ -24,6 +30,8 @@ export function App() {
   const { settings, saveSettings, isSaving, saveStatus } = useSettings();
   const { preference, setThemePreference } = useTheme();
   const pagination = usePagination(currentFilter);
+  const [route, navigate] = useRoute();
+  const { stats, error: statsError } = useStats();
 
   const matchesSelection = useCallback((item: { project: string }) => {
     return !currentFilter || item.project === currentFilter;
@@ -91,31 +99,58 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFilter]);
 
+  const currentNavItem = NAV_ITEMS.find(item => item.id === route) ?? NAV_ITEMS[0];
+
   return (
     <>
-      <Header
-        projects={projects}
-        currentFilter={currentFilter}
-        onFilterChange={setCurrentFilter}
-        isProcessing={isProcessing}
-        queueDepth={queueDepth}
-        themePreference={preference}
-        onThemeChange={setThemePreference}
-        onContextPreviewToggle={toggleContextPreview}
-        onShowHelp={() => {
-          setStoredWelcomeDismissed(false);
-          setWelcomeDismissed(false);
-        }}
-      />
+      <div className="app-shell">
+        <Sidebar
+          route={route}
+          onNavigate={navigate}
+          isProcessing={isProcessing}
+          queueDepth={queueDepth}
+          themePreference={preference}
+          onThemeChange={setThemePreference}
+          onSettingsToggle={toggleContextPreview}
+        />
 
-      <Feed
-        observations={allObservations}
-        summaries={allSummaries}
-        prompts={allPrompts}
-        onLoadMore={handleLoadMore}
-        isLoading={pagination.observations.isLoading || pagination.summaries.isLoading || pagination.prompts.isLoading}
-        hasMore={pagination.observations.hasMore || pagination.summaries.hasMore || pagination.prompts.hasMore}
-      />
+        <div className="app-main">
+          <Header
+            projects={projects}
+            currentFilter={currentFilter}
+            onFilterChange={setCurrentFilter}
+            onShowHelp={() => {
+              setStoredWelcomeDismissed(false);
+              setWelcomeDismissed(false);
+            }}
+          />
+
+          {route === 'home' && (
+            <Dashboard
+              stats={stats}
+              statsError={statsError}
+              observations={allObservations}
+              summaries={allSummaries}
+              prompts={allPrompts}
+              currentFilter={currentFilter}
+              onNavigate={navigate}
+            />
+          )}
+
+          {route === 'recall' && (
+            <Feed
+              observations={allObservations}
+              summaries={allSummaries}
+              prompts={allPrompts}
+              onLoadMore={handleLoadMore}
+              isLoading={pagination.observations.isLoading || pagination.summaries.isLoading || pagination.prompts.isLoading}
+              hasMore={pagination.observations.hasMore || pagination.summaries.hasMore || pagination.prompts.hasMore}
+            />
+          )}
+
+          {!currentNavItem.built && <ComingSoon item={currentNavItem} />}
+        </div>
+      </div>
 
       {!welcomeDismissed && (
         <WelcomeCard onDismiss={() => setWelcomeDismissed(true)} />
