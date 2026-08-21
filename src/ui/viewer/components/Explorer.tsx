@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { ObservationCard } from './ObservationCard';
 import { TreeGraph } from './TreeGraph';
 import { useExplorerDay } from '../hooks/useExplorerDay';
@@ -43,8 +43,17 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
   // must re-centre, and an unchanged id would not re-run the effect.
   const [locate, setLocate] = useState<{ nodeId: string; nonce: number } | null>(null);
   const [selected, setSelected] = useState<Observation | null>(null);
+  const detailRef = useRef<HTMLElement | null>(null);
+  // A deep link can land on another day, which re-centres the whole graph;
+  // yanking the page down to the panel on top of that hides what just loaded.
+  const suppressDetailScrollRef = useRef(false);
 
   const { data, isLoading, error } = useExplorerDay(currentFilter, day, liveObservationCount);
+
+  // The deep-link effect only depends on selectedId, so it reads the current
+  // day through a ref rather than a stale closure.
+  const dayRef = useRef<string | null>(null);
+  dayRef.current = day;
 
   // The server decides which day to show when none is pinned; adopt it so the
   // stepper has somewhere to step from.
@@ -84,14 +93,17 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
         if (!response.ok) return;
         const observation = await response.json() as Observation;
         if (cancelled) return;
-        setSelected(observation);
         const observationDay = new Date(observation.created_at_epoch);
         const key = [
           observationDay.getFullYear(),
           String(observationDay.getMonth() + 1).padStart(2, '0'),
           String(observationDay.getDate()).padStart(2, '0'),
         ].join('-');
-        setDay(prev => (prev === key ? prev : key));
+        if (dayRef.current !== key) {
+          suppressDetailScrollRef.current = true;
+          setDay(key);
+        }
+        setSelected(observation);
       } catch {
         // A bad id in the URL just leaves the panel closed.
       }
@@ -99,6 +111,17 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
 
     return () => { cancelled = true; };
   }, [selectedId]);
+
+  // The panel sits below a canvas that keeps its natural height, so on most
+  // viewports a click leaves it off-screen unless we go to it.
+  useEffect(() => {
+    if (!selected) return;
+    if (suppressDetailScrollRef.current) {
+      suppressDetailScrollRef.current = false;
+      return;
+    }
+    detailRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selected?.id]);
 
   const currentTab = TABS.find(t => t.id === tab)!;
 
@@ -165,7 +188,7 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
       )}
 
       {selected && (
-        <aside className="explorer-detail-panel" aria-label="Selected observation">
+        <aside className="explorer-detail-panel" ref={detailRef} aria-label="Selected observation">
           <button type="button" className="explorer-detail-close" onClick={() => onSelect(undefined)} aria-label="Close">×</button>
           <ObservationCard observation={selected} />
         </aside>

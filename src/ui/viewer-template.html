@@ -2853,11 +2853,14 @@
       min-height: 0;
     }
 
-    /* Explorer: the graph canvas scrolls on its own, so the page must not. */
+    /* Explorer: the tree keeps its natural height, so this column is what
+       scrolls. min-height:0 is what lets it shrink inside .app-main and hand
+       the overflow to its own scrollbar instead of getting clipped. */
     .explorer {
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      min-height: 0;
+      overflow-y: auto;
     }
 
     .explorer-tabs {
@@ -2982,16 +2985,23 @@
 
     /* The dotted ground the graph sits on, as in the reference layout. */
     .tree-graph {
-      flex: 1;
-      /* Enough for all five tiers plus the leaf labels; below this the canvas
-         scrolls rather than clipping the bottom of the tree. */
-      min-height: 480px;
+      /* Never shrink below the tree (flex-shrink 0 + a content basis), but
+         grow to fill the pane on days whose tree is only a tier or two deep.
+         overflow stays for the horizontal axis; vertically it never triggers
+         because the box is sized to the svg. */
+      flex: 1 0 auto;
       overflow: auto;
       border: 1px solid var(--color-border-primary);
       border-radius: 10px;
       background-color: var(--color-bg-card);
       background-image: radial-gradient(var(--color-border-secondary) 1px, transparent 1px);
       background-size: 22px 22px;
+    }
+
+    /* Inline svg sits on the text baseline; the few pixels underneath would
+       otherwise overflow the box and raise a vertical scrollbar of its own. */
+    .tree-graph svg {
+      display: block;
     }
 
     .tree-graph-empty {
@@ -3065,8 +3075,13 @@
 
     .explorer-detail-panel {
       position: relative;
+      /* overflow-y:auto zeroes a flex item's automatic minimum size, so
+         without an explicit basis the canvas shrinks this away entirely. */
+      flex: 0 0 auto;
       margin-top: 14px;
-      max-height: 38%;
+      /* A percentage resolves against an auto-height parent as none, which
+         would let a long observation grow without limit. */
+      max-height: 320px;
       overflow-y: auto;
       padding-right: 4px;
     }
@@ -3120,17 +3135,6 @@
 
       .page {
         padding: 20px 16px 40px;
-      }
-
-      /* The canvas needs a floor to be usable at all; below that the page
-         scrolls instead of the graph. */
-      .explorer {
-        display: block;
-        overflow-y: auto;
-      }
-
-      .tree-graph {
-        height: 60vh;
       }
 
       .explorer-stepper-value {
