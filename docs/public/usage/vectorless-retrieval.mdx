@@ -11,6 +11,34 @@ picks the relevant days, then picks specific observations. No embeddings
 involved, and the index is built fresh from SQLite on every query — it can
 never go stale.
 
+## How the walk works
+
+The index is rebuilt from SQLite on every query, then narrowed in at most two
+LLM rounds. Only the two nodes labelled `LLM` cost a model call.
+
+```mermaid
+flowchart TD
+  A["temporal_search with a query"] --> B["orchestrator routes on strategyHint vectorless"]
+  B --> C["load newest maxIndexRows observations from SQLite"]
+  C --> D{"query present and index non-empty?"}
+  D -- no --> E["empty result, rounds 0"]
+  D -- yes --> F["group rows into a day index"]
+  F --> G{"distinct days above maxDays?"}
+  G -- no --> M["skip round 1, every day carries forward"]
+  G -- yes --> H["round 1 LLM: pick the relevant days"]
+  H --> I["keep only rows on the picked days"]
+  I --> J{"any rows left?"}
+  J -- no --> K["empty result, rounds 2, daysWalked kept"]
+  J -- yes --> L["round 2 LLM: pick observation ids"]
+  M --> L
+  L --> N["intersect the picked ids against the loaded rows"]
+  N --> O["results plus coverage and traversal"]
+  B -. strategy throws .-> P["fall back to SQLite search"]
+```
+
+The `rounds` field in `traversal` reports which path ran: `1` when the day
+selection was skipped, `2` when it ran.
+
 ## When to use it
 
 Use the `temporal_search` MCP tool when the answer spans multiple days or
@@ -39,6 +67,13 @@ Each query costs 1-2 model calls (using your `CLAUDE_MEM_MODEL`). Bounds:
 |---------|---------|---------|
 | `CLAUDE_MEM_VECTORLESS_MAX_INDEX_ROWS` | `500` | Max observations loaded into the walked index |
 | `CLAUDE_MEM_VECTORLESS_MAX_DAYS` | `14` | Above this many days, a day-selection round runs first |
+
+Measured against a 6,092-observation database with the index capped at the
+default 500 rows: round 1 sends roughly 3k characters, round 2 roughly 40k
+characters — about 10k tokens — and the whole walk takes 15-25 seconds on
+`claude-haiku-4-5`. Lower `CLAUDE_MEM_VECTORLESS_MAX_INDEX_ROWS` if that is
+too much per query; round 2 grows with the number of rows that survive the
+day selection.
 
 Chroma-backed search is untouched — `search` keeps using it. Vectorless only
 runs for `temporal_search`, and only when enabled.
