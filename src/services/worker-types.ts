@@ -107,6 +107,11 @@ export interface PaginatedResult<T> {
 /** One node of the Explorer tree: a session, summarised. */
 export interface ExplorerSession {
   sessionId: string;
+  /**
+   * Stable across the worker rotating memory_session_id when a session
+   * continues, which sessionId is not — see the Explorer docs.
+   */
+  contentSessionId: string;
   project: string;
   label: string;
   count: number;

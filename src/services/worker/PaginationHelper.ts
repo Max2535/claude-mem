@@ -129,6 +129,7 @@ export class PaginationHelper {
     let query = `
       SELECT
         o.memory_session_id as sessionId,
+        COALESCE(s.content_session_id, o.memory_session_id) as contentSessionId,
         COALESCE(s.project, MIN(o.project)) as project,
         COALESCE(
           NULLIF(s.custom_title, ''),

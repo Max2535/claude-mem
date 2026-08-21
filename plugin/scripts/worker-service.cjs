@@ -2352,6 +2352,7 @@ ${s.content}`:r.push({role:i,parts:[{text:s.content}]})}return r.length===0?[{ro
     `,c=[],l=[];n?(l.push("(o.project = ? OR o.merged_into_project = ?)"),c.push(n,n)):(l.push("o.project != ?"),c.push(fn)),s&&(l.push("COALESCE(s.platform_source, 'claude') = ?"),c.push(s)),i&&(l.push("o.memory_session_id = ?"),c.push(i)),l.length>0&&(a+=` WHERE ${l.join(" AND ")}`),a+=" ORDER BY o.created_at_epoch DESC LIMIT ? OFFSET ?",c.push(r+1,e);let u=o.prepare(a).all(...c),d={items:u.slice(0,r),hasMore:u.length>r,offset:e,limit:r};return{...d,items:d.items.map(p=>this.sanitizeObservation(p))}}getSessionTree(e,r){let n=this.dbManager.getSessionStore().db,s=`
       SELECT
         o.memory_session_id as sessionId,
+        COALESCE(s.content_session_id, o.memory_session_id) as contentSessionId,
         COALESCE(s.project, MIN(o.project)) as project,
         COALESCE(
           NULLIF(s.custom_title, ''),

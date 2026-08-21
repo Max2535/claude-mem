@@ -62,6 +62,8 @@ export interface StreamEvent {
 /** One node of GET /api/sessions/tree. */
 export interface ExplorerSession {
   sessionId: string;
+  /** Stable identity for the node; sessionId rotates when a session continues. */
+  contentSessionId: string;
   project: string;
   label: string;
   count: number;

@@ -86,6 +86,11 @@ through it.
 opening `#/explorer/<id>` cold means nothing has loaded the observation yet, so
 the component asks which session owns it before any session can be expanded.
 
+**The tree carries two session ids.** `sessionId` is the `memory_session_id`
+the observation query filters on; `contentSessionId` is what the viewer keys
+expansion and page caches on, because the worker rotates the former whenever a
+session continues.
+
 **`ExplorerSession` appears twice** — once in `services/worker-types.ts` and
 once in `viewer/types.ts`. The viewer's `tsconfig.json` pins `rootDir` to the
 viewer directory, so it cannot import the worker's type; the two declarations

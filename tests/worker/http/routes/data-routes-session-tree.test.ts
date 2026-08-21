@@ -138,6 +138,34 @@ describe('GET /api/sessions/tree', () => {
     expect(payload.sessions.map((s: any) => s.sessionId)).toEqual(['memory-mine']);
   });
 
+  it('carries contentSessionId, which survives a memory_session_id rotation', () => {
+    // The worker rotates memory_session_id when a content session continues:
+    // it rewrites the existing observations onto a fresh id and drops the old
+    // one. The viewer keys node expansion off contentSessionId because of it,
+    // so the tree has to carry that column.
+    const dbId = seedSession('content-stable', 'memory-first', 'prompt');
+    seedObservation('memory-first', 'Before the rotation', baseEpoch);
+
+    const handler = captureRoute(routes, '/api/sessions/tree');
+    const first = makeResponse();
+    handler(makeRequest({ project }), first.res);
+    const before = (first.json.mock.calls[0][0] as any).sessions[0];
+    expect(before).toMatchObject({ sessionId: 'memory-first', contentSessionId: 'content-stable' });
+
+    // Rotate exactly as the worker does: point the session row and its existing
+    // observations at a new memory_session_id.
+    store.db.prepare('UPDATE sdk_sessions SET memory_session_id = ? WHERE id = ?').run('memory-second', dbId);
+    store.db.prepare('UPDATE observations SET memory_session_id = ? WHERE memory_session_id = ?')
+      .run('memory-second', 'memory-first');
+
+    const second = makeResponse();
+    handler(makeRequest({ project }), second.res);
+    const after = (second.json.mock.calls[0][0] as any).sessions[0];
+
+    expect(after.sessionId).toBe('memory-second');
+    expect(after.contentSessionId).toBe(before.contentSessionId);
+  });
+
   it('omits the observer-sessions project when no project is requested', () => {
     seedSession('content-visible', 'memory-visible', 'prompt');
     seedObservation('memory-visible', 'Visible', baseEpoch);

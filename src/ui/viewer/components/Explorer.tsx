@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ObservationCard } from './ObservationCard';
-import { useExplorerTree } from '../hooks/useExplorerTree';
+import { useExplorerTree, nodeKey } from '../hooks/useExplorerTree';
 import { Observation, ExplorerSession } from '../types';
 
 type GroupMode = 'time' | 'project';
@@ -50,14 +50,15 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
 
   // Expansion is keyed by session id and kept outside the data, so the debounced
   // SSE refetch replaces the tree without collapsing what the user opened.
-  const toggle = useCallback((sessionId: string) => {
+  const toggle = useCallback((session: ExplorerSession) => {
+    const key = nodeKey(session);
     setExpanded(prev => {
       const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(sessionId);
-        void loadSession(sessionId);
+        next.add(key);
+        void loadSession(session);
       }
       return next;
     });
@@ -90,15 +91,19 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
         if (!response.ok) return;
         const observation = await response.json() as Observation;
         if (cancelled) return;
-        setExpanded(prev => new Set(prev).add(observation.memory_session_id));
-        void loadSession(observation.memory_session_id);
+        // The tree row is the only place the node's stable key is known, so a
+        // deep link has to be resolved through it rather than opened directly.
+        const owner = sessions.find(s => s.sessionId === observation.memory_session_id);
+        if (!owner) return;
+        setExpanded(prev => new Set(prev).add(nodeKey(owner)));
+        void loadSession(owner);
       } catch {
         // A bad id in the URL just leaves the pane empty.
       }
     })();
 
     return () => { cancelled = true; };
-  }, [selectedId, selected, loadSession]);
+  }, [selectedId, selected, loadSession, sessions]);
 
   // A deep link expands a session that may be hundreds of rows down; without
   // this the highlighted row sits off-screen and the tree looks unresponsive.
@@ -152,8 +157,8 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
               <h2 className="explorer-group-label">{groupLabel}</h2>
 
               {groupSessionList.map(session => {
-                const isOpen = expanded.has(session.sessionId);
-                const page = pages[session.sessionId];
+                const isOpen = expanded.has(nodeKey(session));
+                const page = pages[nodeKey(session)];
                 const remaining = session.count - (page?.items.length ?? 0);
 
                 return (
@@ -162,7 +167,7 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
                       type="button"
                       className="explorer-session-btn"
                       aria-expanded={isOpen}
-                      onClick={() => toggle(session.sessionId)}
+                      onClick={() => toggle(session)}
                     >
                       <svg
                         className={`explorer-caret${isOpen ? ' is-open' : ''}`}
@@ -202,7 +207,7 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
                           <button
                             type="button"
                             className="explorer-more"
-                            onClick={() => void loadSession(session.sessionId)}
+                            onClick={() => void loadSession(session)}
                           >
                             Show more{remaining > 0 ? ` — ${remaining} left` : ''}
                           </button>

@@ -37,8 +37,24 @@ flowchart TD
 The SSE path refetches rather than merging the event into the tree. A node
 carries a count, not the ids behind it, so there is no way to tell a live
 observation apart from one already counted — merging would double-count it.
-Expanded nodes and the current selection live outside the fetched data, so a
-refetch does not collapse what you opened.
+
+## Why nodes are keyed by content session
+
+When a content session continues, the worker issues it a fresh
+`memory_session_id`, rewrites that session's existing observations onto the new
+id, and drops the old one — the session row itself is reused, so the session
+count does not change. Anything the viewer remembers about a node therefore
+cannot be keyed on `memory_session_id`: the moment a new observation lands in
+an open session, the node it was keyed to no longer exists and the node
+collapses.
+
+Expansion and page caches are keyed on `contentSessionId`, which survives that
+rotation. `memory_session_id` is still what the observation query filters on,
+since that is the column observations carry. Deep links are unaffected —
+observation ids do not rotate.
+
+If a refetch shows a different count for a node whose children are open, that
+node's cached page is reloaded, so the header and the rows cannot disagree.
 
 ## Two views of one fetch
 
