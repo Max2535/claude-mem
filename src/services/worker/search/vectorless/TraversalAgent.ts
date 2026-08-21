@@ -1,3 +1,5 @@
+import { logger } from '../../../../utils/logger.js';
+
 export type LlmFn = (prompt: string) => Promise<string>;
 
 export interface TraversalSelection {
@@ -30,7 +32,9 @@ export class TraversalAgent {
       `Respond with ONLY a JSON object: {"days": ["YYYY-MM-DD", ...]} — at most ${maxDays} days.`,
     ].join('\n');
     const response = await this.llm(prompt);
-    return (parseTraversalResponse(response).days ?? []).slice(0, maxDays);
+    const days = (parseTraversalResponse(response).days ?? []).slice(0, maxDays);
+    logger.debug('SEARCH', 'TraversalAgent: selected days', { query, maxDays, selected: days.length });
+    return days;
   }
 
   async selectObservations(query: string, obsIndexText: string, limit: number): Promise<number[]> {
@@ -43,6 +47,8 @@ export class TraversalAgent {
       `Respond with ONLY a JSON object: {"ids": [<number>, ...]} — the most relevant ids, best first, at most ${limit}.`,
     ].join('\n');
     const response = await this.llm(prompt);
-    return (parseTraversalResponse(response).ids ?? []).slice(0, limit);
+    const ids = (parseTraversalResponse(response).ids ?? []).slice(0, limit);
+    logger.debug('SEARCH', 'TraversalAgent: selected observations', { query, limit, selected: ids.length });
+    return ids;
   }
 }

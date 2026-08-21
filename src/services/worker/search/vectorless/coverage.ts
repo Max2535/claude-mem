@@ -1,4 +1,5 @@
 import { normalizePlatformSource } from '../../../../shared/platform-source.js';
+import { logger } from '../../../../utils/logger.js';
 import type { ObservationSearchResult, SourceCoverage } from '../types.js';
 
 function countBySource(rows: ObservationSearchResult[]): Record<string, number> {
@@ -15,5 +16,12 @@ export function computeSourceCoverage(
   indexed: ObservationSearchResult[],
   matched: ObservationSearchResult[]
 ): SourceCoverage {
-  return { indexed: countBySource(indexed), matched: countBySource(matched) };
+  const coverage = { indexed: countBySource(indexed), matched: countBySource(matched) };
+  // A source that is indexed but never matched is the signature of a walk that
+  // is silently ignoring a whole platform — worth seeing in the log.
+  logger.debug('SEARCH', 'computeSourceCoverage: source coverage', {
+    indexed: coverage.indexed,
+    matched: coverage.matched,
+  });
+  return coverage;
 }

@@ -1,4 +1,5 @@
 import { normalizePlatformSource } from '../../../../shared/platform-source.js';
+import { logger } from '../../../../utils/logger.js';
 import type { ObservationSearchResult } from '../types.js';
 
 const SAMPLE_TITLES_PER_DAY = 5;
@@ -26,6 +27,10 @@ export function buildDayIndex(rows: ObservationSearchResult[]): DayIndexEntry[] 
     if (!byDay.has(day)) byDay.set(day, []);
     byDay.get(day)!.push(row);
   }
+  logger.debug('SEARCH', 'IndexBuilder: built day index', {
+    rows: rows.length,
+    days: byDay.size,
+  });
   return [...byDay.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([day, dayRows]) => ({
