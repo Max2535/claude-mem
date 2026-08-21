@@ -18,6 +18,10 @@ import {
 } from './search/index.js';
 import { ResultFormatter } from './search/ResultFormatter.js';
 import { ChromaUnavailableError } from './search/errors.js';
+import { VectorlessSearchStrategy, type VectorlessConfig } from './search/strategies/VectorlessSearchStrategy.js';
+import { runVectorlessLlm } from './search/vectorless/llm-runner.js';
+import { SettingsDefaultsManager, type SettingsDefaults } from '../../shared/SettingsDefaultsManager.js';
+import { USER_SETTINGS_PATH } from '../../shared/paths.js';
 
 /**
  * Telemetry envelope for search_performed (see docs/public/telemetry.mdx).
@@ -32,8 +36,22 @@ export interface SearchTelemetryEnvelope {
   fallback_reason?: 'none' | 'chroma_connection' | 'chroma_error' | 'chroma_not_initialized';
 }
 
+/** Returns null when vectorless retrieval is off — the caller then wires no strategy at all. */
+export function buildVectorlessConfig(settings: SettingsDefaults): VectorlessConfig | null {
+  if (settings.CLAUDE_MEM_VECTORLESS_ENABLED !== 'true') return null;
+  const parse = (value: string, fallback: number): number => {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    maxIndexRows: parse(settings.CLAUDE_MEM_VECTORLESS_MAX_INDEX_ROWS, 500),
+    maxDays: parse(settings.CLAUDE_MEM_VECTORLESS_MAX_DAYS, 14),
+  };
+}
+
 export class SearchManager {
   private orchestrator: SearchOrchestrator;
+  private vectorlessStrategy: VectorlessSearchStrategy | null;
 
   constructor(
     private sessionSearch: SessionSearch,
@@ -42,11 +60,43 @@ export class SearchManager {
     private formatter: FormattingService,
     private timelineService: TimelineService
   ) {
+    const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+    const vectorlessConfig = buildVectorlessConfig(settings);
+    this.vectorlessStrategy = vectorlessConfig
+      ? new VectorlessSearchStrategy(sessionSearch, runVectorlessLlm, vectorlessConfig)
+      : null;
     this.orchestrator = new SearchOrchestrator(
       sessionSearch,
       sessionStore,
-      chromaSync
+      chromaSync,
+      this.vectorlessStrategy
     );
+  }
+
+  async temporalSearch(args: any): Promise<any> {
+    if (!this.vectorlessStrategy) {
+      return {
+        error: 'Vectorless retrieval is disabled',
+        hint: 'Set CLAUDE_MEM_VECTORLESS_ENABLED=true in ~/.claude-mem/settings.json and restart the worker',
+      };
+    }
+    const dateRange = (args.dateStart || args.dateEnd)
+      ? { start: args.dateStart, end: args.dateEnd }
+      : undefined;
+    const result = await this.orchestrator.search({
+      query: args.query,
+      limit: args.limit ? parseInt(String(args.limit), 10) : undefined,
+      project: args.project,
+      platformSource: args.platformSource,
+      dateRange,
+      strategyHint: 'vectorless',
+    });
+    return {
+      observations: result.results.observations,
+      coverage: result.coverage,
+      traversal: result.traversal,
+      strategy: result.strategy,
+    };
   }
 
   getOrchestrator(): SearchOrchestrator {
