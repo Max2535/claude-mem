@@ -34,6 +34,9 @@ export class VectorlessSearchStrategy {
       dateRange,
       limit: this.config.maxIndexRows,
       orderBy: 'date_desc',
+      // A temporal_search may carry only a query; the walk still wants the
+      // newest maxIndexRows rows rather than being rejected as unfiltered.
+      allowUnfiltered: true,
     });
 
     const empty: StrategySearchResult = {

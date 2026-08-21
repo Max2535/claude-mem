@@ -65,6 +65,11 @@ export interface SearchOptions extends SearchFilters {
   offset?: number;
   orderBy?: 'relevance' | 'date_desc' | 'date_asc';
   isFolder?: boolean;
+  // Opt out of the filter-only guard for callers that deliberately want the
+  // newest N rows with no filters — the vectorless index walk builds its index
+  // that way and bounds the scan with `limit`. Accidental unfiltered searches
+  // still throw.
+  allowUnfiltered?: boolean;
 }
 
 export interface ObservationSearchResult extends ObservationRow {

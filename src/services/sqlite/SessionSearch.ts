@@ -246,11 +246,11 @@ export class SessionSearch {
 
   searchObservations(query: string | undefined, options: SearchOptions = {}): ObservationSearchResult[] {
     const params: any[] = [];
-    const { limit = 50, offset = 0, orderBy = 'relevance', ...filters } = options;
+    const { limit = 50, offset = 0, orderBy = 'relevance', allowUnfiltered = false, ...filters } = options;
 
     if (!query) {
       const filterClause = this.buildFilterClause(filters, params, 'o');
-      if (!filterClause) {
+      if (!filterClause && !allowUnfiltered) {
         throw new AppError(SessionSearch.MISSING_SEARCH_INPUT_MESSAGE, 400, 'INVALID_SEARCH_REQUEST');
       }
 
@@ -259,7 +259,7 @@ export class SessionSearch {
       const sql = `
         SELECT o.*, o.discovery_tokens
         FROM observations o
-        WHERE ${filterClause}
+        WHERE ${filterClause || '1=1'}
         ${orderClause}
         LIMIT ? OFFSET ?
       `;
