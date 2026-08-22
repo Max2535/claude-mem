@@ -48,24 +48,38 @@ describe('buildHierarchy', () => {
     row({ id: 3, createdAt: base + BLOCK_GAP_MS + 5000, promptNumber: 3, contentSessionId: 'content-2', project: 'other' }),
   ];
 
-  it('by time: day > block > session > prompt > observation', () => {
+  it('by time: day > block > prompt > observation once the lone session merges', () => {
     const root = buildHierarchy('2026-07-14', rows, 'time');
     expect(root.data.kind).toBe('day');
     expect(root.children).toHaveLength(2);
 
     const [first] = root.children;
     expect(first.data.kind).toBe('block');
-    expect(first.data.label).toMatch(/\d\d:\d\d – \d\d:\d\d/);
-    expect(first.children[0].data.kind).toBe('session');
-    expect(first.children[0].children[0].data.kind).toBe('prompt');
-    expect(first.children[0].children[0].children[0].data.kind).toBe('observation');
-    expect(first.children[0].children[0].children[0].data.observationId).toBe(1);
+    // The block keeps its id — Locate addresses it by that exact string — and
+    // takes the session's title, with the time range moved to the tooltip.
+    expect(first.id).toBe('day-2026-07-14-b0');
+    expect(first.data.label).toBe('Observation 1');
+    expect(first.data.hint).toMatch(/\d\d:\d\d – \d\d:\d\d/);
+    expect(first.children[0].data.kind).toBe('prompt');
+    expect(first.children[0].children[0].data.kind).toBe('observation');
+    expect(first.children[0].children[0].data.observationId).toBe(1);
   });
 
-  it('by app: the second tier is the project, and the rest is unchanged', () => {
+  it('keeps the session tier when a block really holds more than one', () => {
+    const shared = [
+      row({ id: 1, createdAt: base, contentSessionId: 'content-1' }),
+      row({ id: 2, createdAt: base + 1000, contentSessionId: 'content-2' }),
+    ];
+    const [block] = buildHierarchy('2026-07-14', shared, 'time').children;
+    expect(block.children.map(c => c.data.kind)).toEqual(['session', 'session']);
+    expect(block.data.hint).toBeUndefined();
+  });
+
+  it('by app: the project keeps the label and the merged session becomes the hint', () => {
     const root = buildHierarchy('2026-07-14', rows, 'app');
     expect(root.children.map(c => c.data.label)).toEqual(['max', 'other']);
-    expect(root.children[0].children[0].data.kind).toBe('session');
+    expect(root.children[0].data.hint).toBe('Observation 1');
+    expect(root.children[0].children[0].data.kind).toBe('prompt');
   });
 
   it('counts every observation once at the root regardless of mode', () => {

@@ -41,7 +41,7 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
   const [blockIndex, setBlockIndex] = useState(0);
   // A nonce rather than just the id: clicking Locate twice on the same block
   // must re-centre, and an unchanged id would not re-run the effect.
-  const [locate, setLocate] = useState<{ nodeId: string; nonce: number } | null>(null);
+  const [locate, setLocate] = useState<{ nodeId: string; nonce: number; pulse: boolean } | null>(null);
   const [selected, setSelected] = useState<Observation | null>(null);
   const detailRef = useRef<HTMLElement | null>(null);
   // A deep link can land on another day, which re-centres the whole graph;
@@ -55,11 +55,17 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
   const dayRef = useRef<string | null>(null);
   dayRef.current = day;
 
+  // A deep link picks the day too, and the two choices race: both land as
+  // effects in the same commit and whichever runs second wins, which is how a
+  // link to yesterday ends up drawing today's tree. Hold the adoption until
+  // the link has had its say.
+  const [deepLinkPending, setDeepLinkPending] = useState<boolean>(!!selectedId);
+
   // The server decides which day to show when none is pinned; adopt it so the
   // stepper has somewhere to step from.
   useEffect(() => {
-    if (!day && data.day) setDay(data.day);
-  }, [data.day, day]);
+    if (!day && data.day && !deepLinkPending) setDay(data.day);
+  }, [data.day, day, deepLinkPending]);
 
   const blocks = useMemo(() => splitIntoBlocks(data.observations), [data.observations]);
 
@@ -72,19 +78,30 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
   }, [data.days, dayIndex]);
 
   const block = blocks[blockIndex];
+  /** The stepper is a cursor over the day, so moving it moves the canvas too. */
+  const stepBlock = useCallback((delta: number) => {
+    setBlockIndex(prev => {
+      const next = Math.min(Math.max(prev + delta, 0), blocks.length - 1);
+      // Set from the handler rather than an effect on blockIndex: an effect
+      // would also fire on mount and fight the deep-link scroll.
+      setLocate(current => ({ nodeId: `day-${data.day}-b${next}`, nonce: (current?.nonce ?? 0) + 1, pulse: false }));
+      return next;
+    });
+  }, [blocks.length, data.day]);
   const blockLabel = block
     ? `${clockLabel(block[0].createdAt)} – ${clockLabel(block[block.length - 1].createdAt)}`
     : '—';
 
   const handleLocate = useCallback(() => {
     if (!data.day || mode !== 'time') return;
-    setLocate(prev => ({ nodeId: `day-${data.day}-b${blockIndex}`, nonce: (prev?.nonce ?? 0) + 1 }));
+    setLocate(prev => ({ nodeId: `day-${data.day}-b${blockIndex}`, nonce: (prev?.nonce ?? 0) + 1, pulse: true }));
   }, [data.day, blockIndex, mode]);
 
   // Fetch the full row for whatever the URL points at — the graph only carries
   // labels, and a deep link may name an observation on another day entirely.
   useEffect(() => {
-    if (!selectedId) { setSelected(null); return; }
+    if (!selectedId) { setSelected(null); setDeepLinkPending(false); return; }
+    setDeepLinkPending(true);
     let cancelled = false;
 
     void (async () => {
@@ -106,6 +123,8 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
         setSelected(observation);
       } catch {
         // A bad id in the URL just leaves the panel closed.
+      } finally {
+        if (!cancelled) setDeepLinkPending(false);
       }
     })();
 
@@ -155,12 +174,16 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
           <button type="button" onClick={() => stepDay(1)} disabled={dayIndex < 0 || dayIndex >= data.days.length - 1} aria-label="Next day">›</button>
         </div>
 
-        <div className="explorer-stepper">
-          <button type="button" onClick={() => setBlockIndex(i => Math.max(0, i - 1))} disabled={blockIndex <= 0 || mode !== 'time'} aria-label="Previous time block">‹</button>
-          <span className="explorer-stepper-value">{mode === 'time' ? blockLabel : 'all day'}</span>
-          <button type="button" onClick={() => setBlockIndex(i => Math.min(blocks.length - 1, i + 1))} disabled={mode !== 'time' || blockIndex >= blocks.length - 1} aria-label="Next time block">›</button>
-          <button type="button" className="explorer-locate" onClick={handleLocate} disabled={mode !== 'time' || !block}>Locate</button>
-        </div>
+        {/* With one block the day is the block, and by project every control
+            here is permanently disabled — a dead control is worse than none. */}
+        {mode === 'time' && blocks.length > 1 && (
+          <div className="explorer-stepper">
+            <button type="button" onClick={() => stepBlock(-1)} disabled={blockIndex <= 0} aria-label="Previous time block">‹</button>
+            <span className="explorer-stepper-value">{blockLabel}</span>
+            <button type="button" onClick={() => stepBlock(1)} disabled={blockIndex >= blocks.length - 1} aria-label="Next time block">›</button>
+            <button type="button" className="explorer-locate" onClick={handleLocate} disabled={!block}>Locate</button>
+          </div>
+        )}
 
         <div className="explorer-modes" role="group" aria-label="Group by">
           <button type="button" className={`explorer-mode${mode === 'time' ? ' is-active' : ''}`} aria-pressed={mode === 'time'} onClick={() => setMode('time')}>By Time</button>
@@ -181,6 +204,7 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
           mode={mode}
           selectedId={selected?.id}
           onSelect={id => onSelect(String(id))}
+          currentBlockId={mode === 'time' && blocks.length > 1 ? `day-${data.day}-b${blockIndex}` : undefined}
           locate={locate}
         />
       ) : (

@@ -14,6 +14,8 @@ export interface ExplorerNode {
   /** Short glyph drawn inside the circle; empty for the leaf dots. */
   glyph: string;
   count: number;
+  /** Secondary text for the tooltip; set when a merge folded two labels into one. */
+  hint?: string;
   firstAt: number;
   lastAt: number;
   /** Set only on leaves, so a click can open the observation. */
@@ -106,6 +108,28 @@ function sessionNodes(rows: ExplorerDayObservation[], keyPrefix: string): TreeIn
 }
 
 /**
+ * A block almost always holds exactly one session, and a tier that never
+ * branches costs a row of height and a hop of reading for nothing. Merge the
+ * two into one node rather than dropping either label: the block keeps its id
+ * (Locate addresses it by that exact string) and takes the session's title,
+ * with the time range moved to the tooltip.
+ */
+function mergeLoneSession(block: TreeInput<ExplorerNode>, mode: GroupMode): TreeInput<ExplorerNode> {
+  if (block.children.length !== 1) return block;
+  const session = block.children[0];
+  // By time the session title is the more informative half; by project the
+  // project name is what the mode exists to show, so it keeps the label.
+  const [label, hint] = mode === 'time'
+    ? [session.data.label, block.data.label]
+    : [block.data.label, session.data.label];
+  return {
+    id: block.id,
+    data: { ...block.data, label, glyph: session.data.glyph, hint },
+    children: session.children,
+  };
+}
+
+/**
  * By time the second level is a block of contiguous activity; by app it is the
  * project. Everything below that level is the same either way, so the two modes
  * are one shape with a different second tier rather than two layouts.
@@ -141,7 +165,7 @@ export function buildHierarchy(
         ...span(blockRows),
       },
       children: sessionNodes(blockRows, `day-${day}-b${index}`),
-    }));
+    })).map(block => mergeLoneSession(block, mode));
   } else {
     root.children = groupBy(rows, row => row.project).map(([project, projectRows]) => ({
       id: `day-${day}-a-${project}`,
@@ -153,7 +177,7 @@ export function buildHierarchy(
         ...span(projectRows),
       },
       children: sessionNodes(projectRows, `day-${day}-a-${project}`),
-    }));
+    })).map(block => mergeLoneSession(block, mode));
   }
 
   return root;

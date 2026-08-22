@@ -3032,6 +3032,52 @@
       stroke: none;
     }
 
+    /* A folded branch: the ring says there is more underneath without adding
+       another dot to a row that is already crowded. */
+    .tree-node-ring {
+      fill: none;
+      stroke: var(--color-accent-primary);
+      stroke-width: 1;
+      stroke-dasharray: 2 2;
+      opacity: 0.75;
+    }
+
+    .tree-node.is-folded:hover .tree-node-ring {
+      stroke-dasharray: none;
+      opacity: 1;
+    }
+
+    /* The block the time stepper points at. Solid, and drawn outside the
+       dashed fold ring so a node can wear both at once. */
+    .tree-node-current-ring {
+      fill: none;
+      stroke: var(--color-accent-primary);
+      stroke-width: 1.5;
+    }
+
+    /* Locate's answer when the canvas already fits and there is nothing to
+       scroll: one outward ripple, replayed by remounting the circle. */
+    .tree-node-pulse {
+      fill: none;
+      stroke: var(--color-accent-primary);
+      stroke-width: 2;
+      /* Without fill-box, transform-origin resolves against the whole svg
+         viewport, and the ripple scales away from the node it belongs to. */
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: tree-node-pulse 620ms ease-out 1 forwards;
+      pointer-events: none;
+    }
+
+    @keyframes tree-node-pulse {
+      from { transform: scale(1); opacity: 0.7; }
+      to { transform: scale(2.6); opacity: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tree-node-pulse { animation-duration: 1ms; }
+    }
+
     .tree-node-day .tree-node-dot { fill: var(--color-bg-prompt); stroke: var(--color-border-prompt); }
     .tree-node-block .tree-node-dot { fill: var(--color-tree-block-fill); stroke: var(--color-tree-block-stroke); }
     .tree-node-session .tree-node-dot { fill: var(--color-bg-observation); stroke: var(--color-accent-primary); }
@@ -3145,7 +3191,6 @@
       .explorer-detail-panel {
         max-height: none;
       }
-    }
     }
 
     @media (max-width: 600px) {
