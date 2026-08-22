@@ -3215,6 +3215,136 @@
       }
     }
 
+    /* System: the worker's own vitals, its services, and its log. */
+    .system-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .system-refresh {
+      flex: 0 0 auto;
+      padding: 7px 14px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-button);
+      color: var(--color-text-button);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .system-refresh:hover:not(:disabled) {
+      background: var(--color-bg-button-hover);
+    }
+
+    .system-refresh:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .system-section {
+      margin-top: 24px;
+    }
+
+    .system-section-title {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+
+    .service-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .service-row {
+      padding: 12px 16px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-card);
+    }
+
+    .service-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .service-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .service-pill {
+      flex: 0 0 auto;
+      padding: 2px 9px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      color: var(--color-text-muted);
+    }
+
+    .service-pill.is-ok {
+      color: var(--color-accent-success);
+    }
+
+    .service-pill.is-problem {
+      color: var(--color-accent-error);
+    }
+
+    /* "Off" and "unknown" are not failures, so they stay in muted ink rather
+       than borrowing a colour that would read as an alarm. */
+    .service-pill.is-off,
+    .service-pill.is-unknown {
+      color: var(--color-text-muted);
+    }
+
+    .service-detail {
+      margin: 6px 0 0;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--color-text-secondary);
+      overflow-wrap: anywhere;
+    }
+
+    .service-fix {
+      margin: 4px 0 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--color-text-muted);
+      overflow-wrap: anywhere;
+    }
+
+    /* The console body is shared with the floating drawer; only the frame
+       around it differs. */
+    .console-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .system-console {
+      height: 420px;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
     /* Chat: one question, one answer, and the walk that produced it. */
     .chat-composer {
       display: flex;

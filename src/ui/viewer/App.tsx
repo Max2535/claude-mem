@@ -6,6 +6,7 @@ import { ComingSoon } from './components/ComingSoon';
 import { Feed } from './components/Feed';
 import { Explorer } from './components/Explorer';
 import { Chat } from './components/Chat';
+import { System } from './components/System';
 import { ContextSettingsModal } from './components/ContextSettingsModal';
 import { LogsDrawer } from './components/LogsModal';
 import { WelcomeCard, getStoredWelcomeDismissed, setStoredWelcomeDismissed } from './components/WelcomeCard';
@@ -168,6 +169,15 @@ export function App() {
               currentFilter={currentFilter}
               turns={chatTurns}
               setTurns={setChatTurns}
+            />
+          )}
+
+          {route === 'system' && (
+            <System
+              stats={stats}
+              statsError={statsError}
+              isProcessing={isProcessing}
+              queueDepth={queueDepth}
             />
           )}
 
