@@ -3153,6 +3153,190 @@
       background: var(--color-bg-card-hover);
     }
 
+    /* Chat: one question, one answer, and the walk that produced it. */
+    .chat-composer {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .chat-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 9px 12px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-input);
+      color: var(--color-text-primary);
+      font-size: 14px;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: var(--color-border-focus);
+      box-shadow: var(--shadow-focus);
+    }
+
+    .chat-input:disabled {
+      color: var(--color-text-muted);
+    }
+
+    .chat-submit {
+      flex: 0 0 auto;
+      padding: 9px 16px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-button);
+      color: var(--color-text-button);
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .chat-submit:hover:not(:disabled) {
+      background: var(--color-bg-button-hover);
+    }
+
+    .chat-submit:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .chat-hint {
+      margin: 8px 2px 0;
+      color: var(--color-text-muted);
+      font-size: 12px;
+    }
+
+    .chat-empty {
+      margin-top: 24px;
+      padding: 28px;
+      border: 1px dashed var(--color-border-secondary);
+      border-radius: 10px;
+      color: var(--color-text-muted);
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .chat-turns {
+      list-style: none;
+      margin: 18px 0 0;
+      padding: 0;
+    }
+
+    .chat-turn + .chat-turn {
+      margin-top: 22px;
+      padding-top: 22px;
+      border-top: 1px solid var(--color-border-secondary);
+    }
+
+    .chat-turn-head {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chat-turn-question {
+      color: var(--color-text-title);
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .chat-turn-badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: lowercase;
+      background: var(--color-type-badge-bg);
+      color: var(--color-type-badge-text);
+    }
+
+    .chat-turn-badge.is-keyword {
+      background: var(--color-summary-badge-bg);
+      color: var(--color-summary-badge-text);
+    }
+
+    .chat-turn-note {
+      margin: 8px 0 0;
+      color: var(--color-text-secondary);
+      font-size: 13px;
+    }
+
+    .chat-turn-error {
+      margin: 8px 0 0;
+      color: var(--color-accent-error);
+      font-size: 13px;
+    }
+
+    .chat-walk {
+      list-style: none;
+      margin: 12px 0 0;
+      padding: 0 0 0 16px;
+      border-left: 2px solid var(--color-border-secondary);
+    }
+
+    .chat-step {
+      position: relative;
+      padding: 4px 0;
+      font-size: 13px;
+    }
+
+    .chat-step::before {
+      content: '';
+      position: absolute;
+      left: -21px;
+      top: 11px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-accent-primary);
+    }
+
+    .chat-step-label {
+      color: var(--color-text-primary);
+      font-weight: 600;
+      margin-right: 8px;
+    }
+
+    .chat-step-detail {
+      color: var(--color-text-secondary);
+    }
+
+    .chat-step-pending::before {
+      background: var(--color-skeleton-base);
+    }
+
+    .chat-skeleton {
+      display: block;
+      width: min(320px, 70%);
+      height: 12px;
+      border-radius: 6px;
+      background: linear-gradient(
+        90deg,
+        var(--color-skeleton-base) 25%,
+        var(--color-skeleton-highlight) 50%,
+        var(--color-skeleton-base) 75%
+      );
+      background-size: 200% 100%;
+      animation: chat-skeleton-shimmer 1.4s ease-in-out infinite;
+    }
+
+    @keyframes chat-skeleton-shimmer {
+      from { background-position: 200% 0; }
+      to { background-position: -200% 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chat-skeleton { animation: none; }
+    }
+
+    .chat-results {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
     @media (max-width: 768px) {
       .sidebar {
         width: 60px;

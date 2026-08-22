@@ -38,8 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
     id: 'chat',
     label: 'Chat',
     icon: 'M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z',
-    built: false,
-    planned: 'Ask your memory a question and watch the retrieval walk that answered it, step by step.',
+    built: true,
   },
   {
     id: 'system',

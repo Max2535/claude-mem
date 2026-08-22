@@ -5,6 +5,7 @@ import { Dashboard } from './components/Dashboard';
 import { ComingSoon } from './components/ComingSoon';
 import { Feed } from './components/Feed';
 import { Explorer } from './components/Explorer';
+import { Chat } from './components/Chat';
 import { ContextSettingsModal } from './components/ContextSettingsModal';
 import { LogsDrawer } from './components/LogsModal';
 import { WelcomeCard, getStoredWelcomeDismissed, setStoredWelcomeDismissed } from './components/WelcomeCard';
@@ -16,6 +17,7 @@ import { useRoute } from './hooks/useRoute';
 import { useStats } from './hooks/useStats';
 import { NAV_ITEMS } from './constants/nav';
 import { Observation, Summary, UserPrompt } from './types';
+import { ChatTurn } from './utils/memoryWalk';
 import { mergeAndDeduplicateByProject } from './utils/data';
 
 export function App() {
@@ -26,6 +28,9 @@ export function App() {
   const [paginatedObservations, setPaginatedObservations] = useState<Observation[]>([]);
   const [paginatedSummaries, setPaginatedSummaries] = useState<Summary[]>([]);
   const [paginatedPrompts, setPaginatedPrompts] = useState<UserPrompt[]>([]);
+  // Held here rather than inside Chat: a route change unmounts the screen, and
+  // an answer that cost an LLM subprocess should not vanish with it.
+  const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
 
   const { observations, summaries, prompts, projects, isProcessing, queueDepth } = useSSE();
   const { settings, saveSettings, isSaving, saveStatus } = useSettings();
@@ -155,6 +160,14 @@ export function App() {
               liveObservationCount={observations.length}
               selectedId={routeTail}
               onSelect={id => navigate('explorer', id)}
+            />
+          )}
+
+          {route === 'chat' && (
+            <Chat
+              currentFilter={currentFilter}
+              turns={chatTurns}
+              setTurns={setChatTurns}
             />
           )}
 

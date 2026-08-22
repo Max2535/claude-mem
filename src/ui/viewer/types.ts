@@ -135,3 +135,48 @@ export interface Settings {
   CLAUDE_MEM_CONTEXT_SHOW_LAST_SUMMARY?: string;
   CLAUDE_MEM_CONTEXT_SHOW_LAST_MESSAGE?: string;
 }
+
+/**
+ * A search row carries `platform_source` from a COALESCE in the SessionSearch
+ * SQL, but the server's ObservationRow type does not declare it — so it is
+ * optional here rather than required, and the card gets a default at the call
+ * site instead of a cast that would hide the gap.
+ */
+export type SearchObservation = Omit<Observation, 'platform_source'> & { platform_source?: string };
+
+/** The vectorless walk's own account of how it reached its answer. */
+export interface MemoryWalkTraversal {
+  rounds: number;
+  daysWalked: string[];
+  sessionsWalked: string[];
+  indexRows: number;
+}
+
+/** Observation counts per platform source, before and after the walk picked. */
+export interface MemoryWalkCoverage {
+  indexed: Record<string, number>;
+  matched: Record<string, number>;
+}
+
+/**
+ * Shape of GET /api/search/temporal. Note the 200-with-`error` case: when
+ * vectorless retrieval is switched off the endpoint still answers 200, so
+ * `response.ok` alone never proves a walk happened.
+ */
+export interface MemoryWalkResponse {
+  observations?: SearchObservation[];
+  coverage?: MemoryWalkCoverage;
+  traversal?: MemoryWalkTraversal;
+  strategy?: string;
+  error?: string;
+  hint?: string;
+}
+
+/** Shape of GET /api/search?format=json — the keyword fallback. */
+export interface KeywordSearchResponse {
+  observations?: SearchObservation[];
+  sessions?: unknown[];
+  prompts?: unknown[];
+  totalResults?: number;
+  query?: string;
+}
