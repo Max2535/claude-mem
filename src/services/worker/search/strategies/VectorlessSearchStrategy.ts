@@ -37,6 +37,10 @@ export class VectorlessSearchStrategy {
       // A temporal_search may carry only a query; the walk still wants the
       // newest maxIndexRows rows rather than being rejected as unfiltered.
       allowUnfiltered: true,
+      // Without this the index spends its maxIndexRows budget on claude-mem's
+      // own compression sessions, and the traversal can hand them back as
+      // results — a leak no other observation reader has.
+      excludeObserverSessions: true,
     });
 
     const empty: StrategySearchResult = {

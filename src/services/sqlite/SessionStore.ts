@@ -1712,6 +1712,17 @@ export class SessionStore {
     this.db.run(
       'CREATE INDEX IF NOT EXISTS idx_observations_merged_into ON observations(merged_into_project)'
     );
+    // Covering index for the Explorer's distinct-days scan
+    // (PaginationHelper.getExplorerDay). That query derives the local day with
+    // date(created_at_epoch, ...), which no index can seek, so it always reads
+    // every row — but with project, merged_into_project and created_at_epoch all
+    // in one index it reads them from the index instead of from a table whose
+    // rows carry the narrative and text blobs. Created here rather than beside
+    // the other observation indexes because merged_into_project only exists
+    // after the ALTER above.
+    this.db.run(
+      'CREATE INDEX IF NOT EXISTS idx_observations_day_scope ON observations(project, merged_into_project, created_at_epoch)'
+    );
 
     const sumCols = this.db
       .query('PRAGMA table_info(session_summaries)')

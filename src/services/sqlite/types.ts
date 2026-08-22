@@ -69,12 +69,28 @@ export interface SearchOptions extends SearchFilters {
   // newest N rows with no filters — the vectorless index walk builds its index
   // that way and bounds the scan with `limit`. Accidental unfiltered searches
   // still throw.
+  //
+  // Internal only: SearchManager.normalizeParams strips this (and
+  // excludeObserverSessions) off caller-supplied args, so an HTTP or MCP client
+  // cannot hand itself an unfiltered full-table read.
   allowUnfiltered?: boolean;
+  // Drop claude-mem's own compression-agent sessions from the results. Every
+  // other observation reader does this (PaginationHelper.ts:87 and its three
+  // siblings) — they are the tool's internal bookkeeping, not the user's work.
+  // Not a SearchFilter: it must not satisfy the unfiltered guard, since a scan
+  // of every project but one is still a scan of every project.
+  excludeObserverSessions?: boolean;
 }
 
 export interface ObservationSearchResult extends ObservationRow {
   rank?: number; 
   score?: number; 
+  /**
+   * The owning sdk_session's platform_source, projected by every observation
+   * SELECT in SessionSearch. Optional because rows built by other readers (or
+   * by tests) may not carry it; absent is read as 'claude'.
+   */
+  platform_source?: string;
 }
 
 export interface SessionSummarySearchResult extends SessionSummaryRow {

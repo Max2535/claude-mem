@@ -26,10 +26,16 @@ export interface ChatTurn {
   error?: string;
 }
 
+/** The only strategy that actually walks the index; anything else is not one. */
+const WALK_STRATEGY = 'vectorless';
+
 /**
  * Either the walk answered, or we fall through to keyword search carrying a
  * note that says why. The disabled case arrives as HTTP 200 with an `error`
- * field, so status alone cannot decide this.
+ * field, so status alone cannot decide this — and neither can the absence of an
+ * error, because the orchestrator answers a failed walk with plain SQLite
+ * results (SearchOrchestrator.ts:66) under HTTP 200 and no error at all. Only
+ * the strategy the server names can tell those apart.
  */
 export type WalkOutcome =
   | { kind: 'walk'; observations: SearchObservation[]; traversal?: MemoryWalkTraversal; coverage?: MemoryWalkCoverage }
@@ -42,6 +48,16 @@ export function readWalkResponse(ok: boolean, status: number, body: MemoryWalkRe
   if (!body || body.error) {
     const note = [body?.error, body?.hint].filter(Boolean).join(' — ');
     return { kind: 'fallback', note: note || undefined };
+  }
+  if (body.strategy !== WALK_STRATEGY) {
+    // Understate rather than overstate: a turn that says it walked the index
+    // while showing keyword hits is worse than one that admits it fell back.
+    return {
+      kind: 'fallback',
+      note: body.strategy
+        ? `The retrieval walk did not run — the server answered with ${body.strategy} search.`
+        : 'The retrieval walk did not run — the server did not say which search answered.',
+    };
   }
   return {
     kind: 'walk',

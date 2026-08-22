@@ -48,11 +48,43 @@ describe('readWalkResponse', () => {
   });
 
   it('treats a walk that matched nothing as a walk, not a fallback', () => {
+    // `strategy` is not optional in practice: SearchManager.temporalSearch puts
+    // the strategy that answered on every response. Leaving it off here made
+    // the fixture describe a reply the server never sends.
     const outcome = readWalkResponse(true, 200, {
       observations: [],
       traversal: { rounds: 1, daysWalked: [], sessionsWalked: [], indexRows: 0 },
+      strategy: 'vectorless',
     });
     expect(outcome.kind).toBe('walk');
+  });
+
+  // SearchOrchestrator.ts:66 answers a failed walk with plain SQLite results —
+  // HTTP 200, no error field, no traversal. Read as a walk, the Chat screen
+  // credits keyword hits to an index walk that never ran.
+  it('treats a sqlite answer as a fallback even though nothing failed visibly', () => {
+    const outcome = readWalkResponse(true, 200, {
+      observations: [{ id: 1 } as never],
+      strategy: 'sqlite',
+    });
+
+    expect(outcome.kind).toBe('fallback');
+    if (outcome.kind !== 'fallback') return;
+    expect(outcome.note).toContain('sqlite');
+  });
+
+  it('names whichever strategy answered, not just sqlite', () => {
+    const outcome = readWalkResponse(true, 200, { observations: [], strategy: 'chroma' });
+
+    expect(outcome.kind).toBe('fallback');
+    if (outcome.kind !== 'fallback') return;
+    expect(outcome.note).toContain('chroma');
+  });
+
+  it('does not call it a walk when the server named no strategy at all', () => {
+    const outcome = readWalkResponse(true, 200, { observations: [{ id: 1 } as never] });
+
+    expect(outcome.kind).toBe('fallback');
   });
 });
 

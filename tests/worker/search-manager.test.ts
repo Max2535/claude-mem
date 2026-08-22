@@ -1,5 +1,5 @@
 import { describe, it, expect, mock } from 'bun:test';
-import { SearchManager } from '../../src/services/worker/SearchManager.js';
+import { SearchManager, parseBoundedInt } from '../../src/services/worker/SearchManager.js';
 
 describe('SearchManager platform-scoped Chroma hydration', () => {
   it('normalizes date_from/date_to filters into dateRange for worker search', async () => {
@@ -450,5 +450,129 @@ describe('SearchManager platform-scoped Chroma hydration', () => {
       chroma_available: true,
       fallback_reason: 'none',
     }));
+  });
+});
+
+describe('SearchManager internal search options', () => {
+  function managerWith(searchObservations: any): SearchManager {
+    return new SearchManager(
+      {
+        searchObservations,
+        searchSessions: mock(() => []),
+        searchUserPrompts: mock(() => []),
+      } as any,
+      {} as any,
+      null,
+      {} as any,
+      {} as any,
+    );
+  }
+
+  // args on these paths are HTTP query params (SearchRoutes.ts:177) or MCP tool
+  // input, and they are spread straight into SessionSearch.searchObservations.
+  // allowUnfiltered turns off the guard that stops a full-table read, so a
+  // caller must not be able to hand it to itself.
+  it('drops caller-supplied allowUnfiltered from a filter-only search', async () => {
+    const searchObservations = mock(() => []);
+    await managerWith(searchObservations).search({
+      type: 'observations',
+      allowUnfiltered: true,
+      format: 'json',
+    });
+
+    expect(searchObservations).toHaveBeenCalled();
+    const options = (searchObservations as any).mock.calls[0][1];
+    expect(options.allowUnfiltered).toBeUndefined();
+  });
+
+  it('drops it from searchObservations too, including the string form a query param arrives as', async () => {
+    const searchObservations = mock(() => []);
+    await managerWith(searchObservations).searchObservations({
+      query: 'restart',
+      allowUnfiltered: 'true',
+      excludeObserverSessions: 'false',
+    });
+
+    expect(searchObservations).toHaveBeenCalled();
+    const options = (searchObservations as any).mock.calls[0][1];
+    expect(options.allowUnfiltered).toBeUndefined();
+    expect(options.excludeObserverSessions).toBeUndefined();
+  });
+
+  it('leaves real filters alone while stripping the internal ones', async () => {
+    const searchObservations = mock(() => []);
+    await managerWith(searchObservations).search({
+      type: 'observations',
+      project: 'walk-project',
+      allowUnfiltered: true,
+      format: 'json',
+    });
+
+    const options = (searchObservations as any).mock.calls[0][1];
+    expect(options.project).toBe('walk-project');
+    expect(options.allowUnfiltered).toBeUndefined();
+  });
+});
+
+describe('pagination numbers off the wire', () => {
+  // `?limit=abc` used to become NaN and travel to `LIMIT ?`, so the search came
+  // back empty — indistinguishable from having no matching memories.
+  it('rejects values that are not numbers instead of producing NaN', () => {
+    for (const bad of ['abc', '', '  ', 'NaN', 'Infinity', {}, [], null, undefined, true]) {
+      expect(parseBoundedInt(bad as unknown, 1)).toBeUndefined();
+    }
+  });
+
+  it('rejects a limit below the minimum but keeps offset 0', () => {
+    expect(parseBoundedInt(0, 1)).toBeUndefined();
+    expect(parseBoundedInt(-5, 1)).toBeUndefined();
+    expect(parseBoundedInt(0, 0)).toBe(0);
+    expect(parseBoundedInt('0', 0)).toBe(0);
+  });
+
+  it('accepts the string form a query param arrives as, and truncates fractions', () => {
+    expect(parseBoundedInt('25', 1)).toBe(25);
+    expect(parseBoundedInt(25, 1)).toBe(25);
+    expect(parseBoundedInt('25.9', 1)).toBe(25);
+    expect(parseBoundedInt(25.9, 1)).toBe(25);
+  });
+
+  it('drops an unusable limit so the caller default applies, rather than passing it on', async () => {
+    const searchObservations = mock(() => []);
+    const manager = new SearchManager(
+      {
+        searchObservations,
+        searchSessions: mock(() => []),
+        searchUserPrompts: mock(() => []),
+      } as any,
+      {} as any,
+      null,
+      {} as any,
+      {} as any,
+    );
+
+    await manager.search({ type: 'observations', project: 'p', limit: 'abc', format: 'json' });
+
+    const options = (searchObservations as any).mock.calls[0][1];
+    expect('limit' in options).toBe(false);
+  });
+
+  it('passes a usable limit through as a number', async () => {
+    const searchObservations = mock(() => []);
+    const manager = new SearchManager(
+      {
+        searchObservations,
+        searchSessions: mock(() => []),
+        searchUserPrompts: mock(() => []),
+      } as any,
+      {} as any,
+      null,
+      {} as any,
+      {} as any,
+    );
+
+    await manager.search({ type: 'observations', project: 'p', limit: '7', format: 'json' });
+
+    expect((searchObservations as any).mock.calls[0][1].limit).toBe(7);
   });
 });

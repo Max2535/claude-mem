@@ -49,6 +49,20 @@ export function buildVectorlessConfig(settings: SettingsDefaults): VectorlessCon
   };
 }
 
+/**
+ * Pagination numbers off an HTTP query string or an MCP tool call, which are
+ * whatever the caller typed. `parseInt('abc')` is NaN, and NaN travels all the
+ * way to `LIMIT ?` — the search then comes back empty, which reads as "you have
+ * no memories about this" rather than "that limit was not a number". Anything
+ * unusable becomes undefined so the caller's own default takes over.
+ */
+export function parseBoundedInt(value: unknown, min: number): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed < min) return undefined;
+  return Math.floor(parsed);
+}
+
 export class SearchManager {
   private orchestrator: SearchOrchestrator;
   private vectorlessStrategy: VectorlessSearchStrategy | null;
@@ -85,7 +99,7 @@ export class SearchManager {
       : undefined;
     const result = await this.orchestrator.search({
       query: args.query,
-      limit: args.limit ? parseInt(String(args.limit), 10) : undefined,
+      limit: parseBoundedInt(args.limit, 1),
       project: args.project,
       platformSource: args.platformSource,
       dateRange,
@@ -298,6 +312,14 @@ export class SearchManager {
   private normalizeParams(args: any): any {
     const normalized: any = { ...args };
 
+    // Every arg on this path is caller-supplied — HTTP query params off
+    // SearchRoutes, or MCP tool input. Both of these are internal options that
+    // widen a search rather than narrow it, and args is spread straight into
+    // SessionSearch.searchObservations, so `?allowUnfiltered=true` would
+    // otherwise buy an unfiltered full-table read of every project.
+    delete normalized.allowUnfiltered;
+    delete normalized.excludeObserverSessions;
+
     if (normalized.filePath && !normalized.files) {
       normalized.files = normalized.filePath;
       delete normalized.filePath;
@@ -338,6 +360,19 @@ export class SearchManager {
     delete normalized.date_end;
     delete normalized.date_from;
     delete normalized.date_to;
+
+    // Same reasoning as parseBoundedInt's doc: these arrive as strings and are
+    // spread into the SQL options untouched.
+    if ('limit' in normalized) {
+      const limit = parseBoundedInt(normalized.limit, 1);
+      if (limit === undefined) delete normalized.limit;
+      else normalized.limit = limit;
+    }
+    if ('offset' in normalized) {
+      const offset = parseBoundedInt(normalized.offset, 0);
+      if (offset === undefined) delete normalized.offset;
+      else normalized.offset = offset;
+    }
 
     if (normalized.isFolder === 'true') {
       normalized.isFolder = true;

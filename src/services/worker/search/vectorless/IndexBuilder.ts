@@ -17,7 +17,7 @@ export function dayOf(row: ObservationSearchResult): string {
 }
 
 function sourceOf(row: ObservationSearchResult): string {
-  return normalizePlatformSource((row as { platform_source?: string }).platform_source);
+  return normalizePlatformSource(row.platform_source);
 }
 
 export function buildDayIndex(rows: ObservationSearchResult[]): DayIndexEntry[] {

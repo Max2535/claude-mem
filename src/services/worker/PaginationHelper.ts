@@ -6,6 +6,22 @@ import { OBSERVER_SESSIONS_PROJECT } from '../../shared/paths.js';
 import { USER_PROMPT_DEDUPE_WINDOW_MS } from '../../shared/user-prompts.js';
 import type { PaginatedResult, Observation, Summary, UserPrompt, ExplorerDay, ExplorerDayObservation } from '../worker-types.js';
 
+/**
+ * Epoch bounds of one local calendar day, as SQL. Both halves are constant per
+ * query, so the comparison stays a seek on created_at_epoch.
+ *
+ * Deliberately not computed in JavaScript: `date(..., 'localtime')` resolves
+ * "local" through SQLite, and the two do not always agree on what the local
+ * zone is — under `bun test` the JS side reports UTC while SQLite keeps the
+ * machine's zone. Deriving both ends from the same 'utc'/'localtime' rules
+ * keeps the range exactly equal to the day the days list named.
+ *
+ * The '+1 day' is a calendar step, not +86_400_000, so a day that gains or
+ * loses an hour to DST still ends exactly where the next one begins.
+ */
+const DAY_START_EPOCH_SQL = `CAST(strftime('%s', ? || ' 00:00:00', 'utc') AS INTEGER) * 1000`;
+const DAY_END_EPOCH_SQL = `CAST(strftime('%s', date(?, '+1 day') || ' 00:00:00', 'utc') AS INTEGER) * 1000`;
+
 export class PaginationHelper {
   private dbManager: DatabaseManager;
 
@@ -145,10 +161,16 @@ export class PaginationHelper {
     // localtime, not UTC: the day boundaries a person means are their own.
     const dayExpr = `date(o.created_at_epoch / 1000, 'unixepoch', 'localtime')`;
 
+    // The session join exists only to reach platform_source. Without that
+    // filter it costs one index lookup per observation and, worse, stops the
+    // days scan from being served entirely out of idx_observations_day_scope.
+    const sessionJoin = 'LEFT JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id';
+    const daysJoin = platformSource ? sessionJoin : '';
+
     const days = (db.prepare(`
       SELECT DISTINCT ${dayExpr} as day
       FROM observations o
-      LEFT JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id
+      ${daysJoin}
       WHERE ${where}
       ORDER BY day ASC
     `).all(...scopeParams) as { day: string }[]).map(row => row.day);
@@ -160,6 +182,9 @@ export class PaginationHelper {
       return { day: null, days: [], observations: [] };
     }
 
+    // A range on created_at_epoch instead of `date(...) = ?`: the computed form
+    // has to be evaluated for every row in scope, the range is a seek in
+    // idx_observations_created. Same rows, one day's worth of reads.
     const observations = db.prepare(`
       SELECT
         o.id,
@@ -173,10 +198,12 @@ export class PaginationHelper {
         o.prompt_number as promptNumber,
         o.created_at_epoch as createdAt
       FROM observations o
-      LEFT JOIN sdk_sessions s ON o.memory_session_id = s.memory_session_id
-      WHERE ${where} AND ${dayExpr} = ?
+      ${sessionJoin}
+      WHERE ${where}
+        AND o.created_at_epoch >= ${DAY_START_EPOCH_SQL}
+        AND o.created_at_epoch < ${DAY_END_EPOCH_SQL}
       ORDER BY o.created_at_epoch ASC
-    `).all(...scopeParams, selected) as ExplorerDayObservation[];
+    `).all(...scopeParams, selected, selected) as ExplorerDayObservation[];
 
     logger.debug('WORKER', 'PaginationHelper: built explorer day', {
       day: selected,

@@ -2,6 +2,10 @@ import { describe, test, expect } from 'bun:test';
 import { computeSourceCoverage } from '../../src/services/worker/search/vectorless/coverage.js';
 import type { ObservationSearchResult } from '../../src/services/worker/search/types.js';
 
+// platform_source is a declared member of ObservationSearchResult, projected by
+// every observation SELECT in SessionSearch — so this fixture states it rather
+// than casting it on. That the query really projects it is proved separately in
+// vectorless-coverage-sources.test.ts; this file only tests the counting.
 function obs(id: number, platform_source?: string): ObservationSearchResult {
   return {
     id,
@@ -21,7 +25,7 @@ function obs(id: number, platform_source?: string): ObservationSearchResult {
     created_at: '2026-08-18 10:00:00',
     created_at_epoch: 1787392800000,
     ...(platform_source !== undefined ? { platform_source } : {}),
-  } as ObservationSearchResult;
+  };
 }
 
 describe('computeSourceCoverage', () => {
