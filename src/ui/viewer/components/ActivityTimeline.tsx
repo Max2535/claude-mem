@@ -1,22 +1,27 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Observation, Summary, UserPrompt } from '../types';
-
 /**
  * One dot per recorded event, laid out on a lane per kind. The lanes are
- * direct-labelled, so kind is encoded twice (position + hue) and never by
- * colour alone — the palette is validated for CVD in both themes, but a reader
+ * direct-labelled, so identity is carried by position and never by colour
+ * alone — the palette is validated for CVD in both themes, but a reader
  * should not have to rely on it.
+ *
+ * The lanes are supplied by the caller: Home lanes by record kind, the
+ * Explorer lanes one day by observation type. Callers that group by something
+ * other than record kind share a single tone, since the lane label is already
+ * doing the work a second hue would only duplicate.
  */
 
-interface Mark {
+export interface TimelineMark {
   epoch: number;
   label: string;
 }
 
-interface Lane {
-  key: 'observation' | 'summary' | 'prompt';
+export interface TimelineLane {
+  key: string;
   label: string;
-  marks: Mark[];
+  /** Which of the three chart hues to paint with. */
+  tone: 'observation' | 'summary' | 'prompt';
+  marks: TimelineMark[];
 }
 
 const WINDOWS = [
@@ -39,7 +44,7 @@ const DOT_R = 4;
 const HIT_R = 10;
 const TICK_COUNT = 6;
 
-function truncate(text: string | null | undefined, max = 70): string {
+export function truncate(text: string | null | undefined, max = 70): string {
   const clean = (text ?? '').replace(/\s+/g, ' ').trim();
   if (!clean) return '(untitled)';
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
@@ -54,14 +59,21 @@ function tickLabel(epoch: number, spanMs: number): string {
 }
 
 interface ActivityTimelineProps {
-  observations: Observation[];
-  summaries: Summary[];
-  prompts: UserPrompt[];
+  lanes: TimelineLane[];
+  title?: string;
+  /** A day of work fits in one view, so the Explorer opens on the full span. */
+  defaultWindow?: WindowId;
+  emptyMessage?: string;
 }
 
-export function ActivityTimeline({ observations, summaries, prompts }: ActivityTimelineProps) {
-  const [windowId, setWindowId] = useState<WindowId>('24h');
-  const [hovered, setHovered] = useState<{ x: number; y: number; lane: string; mark: Mark } | null>(null);
+export function ActivityTimeline({
+  lanes,
+  title = 'Activity',
+  defaultWindow = '24h',
+  emptyMessage = 'Nothing to plot yet — the timeline fills in as claude-mem records observations.',
+}: ActivityTimelineProps) {
+  const [windowId, setWindowId] = useState<WindowId>(defaultWindow);
+  const [hovered, setHovered] = useState<{ x: number; y: number; lane: string; mark: TimelineMark } | null>(null);
   const [width, setWidth] = useState(720);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -78,34 +90,35 @@ export function ActivityTimeline({ observations, summaries, prompts }: ActivityT
     return () => observer.disconnect();
   }, []);
 
-  const lanes: Lane[] = useMemo(() => [
-    {
-      key: 'observation',
-      label: 'Observations',
-      marks: observations.map(o => ({ epoch: o.created_at_epoch, label: truncate(o.title ?? o.text) })),
-    },
-    {
-      key: 'summary',
-      label: 'Summaries',
-      marks: summaries.map(s => ({ epoch: s.created_at_epoch, label: truncate(s.request ?? s.completed) })),
-    },
-    {
-      key: 'prompt',
-      label: 'Prompts',
-      marks: prompts.map(p => ({ epoch: p.created_at_epoch, label: truncate(p.prompt_text) })),
-    },
-  ], [observations, summaries, prompts]);
-
   const allEpochs = useMemo(
     () => lanes.flatMap(l => l.marks.map(m => m.epoch)).filter(e => Number.isFinite(e)),
     [lanes]
   );
 
+  const fullSpan = useMemo(
+    () => (allEpochs.length === 0 ? 0 : Math.max(...allEpochs) - Math.min(...allEpochs)),
+    [allEpochs]
+  );
+
+  /**
+   * A window wider than the data shows exactly what "All" shows. Offering both
+   * is offering a button that cannot change anything, so only the windows that
+   * actually narrow the view are rendered.
+   */
+  const offered = useMemo(
+    () => WINDOWS.filter(w => w.ms === null || w.ms < fullSpan),
+    [fullSpan]
+  );
+
+  // The default may not survive the filter on a young database, so fall back
+  // to the one window that is always offered rather than to a hidden button.
+  const activeWindow: WindowId = offered.some(w => w.id === windowId) ? windowId : 'all';
+
   const domain = useMemo(() => {
     if (allEpochs.length === 0) return null;
     const latest = Math.max(...allEpochs);
     const earliest = Math.min(...allEpochs);
-    const selected = WINDOWS.find(w => w.id === windowId)!;
+    const selected = WINDOWS.find(w => w.id === activeWindow)!;
     // Anchored to the newest event rather than to now, so a viewer opened after
     // an idle stretch still shows the work instead of an empty band.
     const end = latest;
@@ -114,7 +127,7 @@ export function ActivityTimeline({ observations, summaries, prompts }: ActivityT
     // scale; give it a minute of room so the dot lands mid-band.
     if (end - start < 60_000) return { start: end - 30_000, end: end + 30_000 };
     return { start, end };
-  }, [allEpochs, windowId]);
+  }, [allEpochs, activeWindow]);
 
   const height = PAD_TOP + lanes.length * LANE_HEIGHT + PAD_BOTTOM;
   const plotWidth = Math.max(width - PAD_LEFT - PAD_RIGHT, 80);
@@ -146,33 +159,34 @@ export function ActivityTimeline({ observations, summaries, prompts }: ActivityT
     <section className="chart-card" aria-label="Activity timeline">
       <div className="chart-head">
         <div>
-          <h2 className="chart-title">Activity</h2>
+          <h2 className="chart-title">{title}</h2>
           <p className="chart-subtitle">
             {domain
               ? `${visibleCount.toLocaleString()} event${visibleCount === 1 ? '' : 's'} · ${tickLabel(domain.start, domain.end - domain.start)} – ${tickLabel(domain.end, domain.end - domain.start)}`
               : 'No activity recorded yet'}
           </p>
         </div>
-        <div className="chart-range" role="group" aria-label="Time range">
-          {WINDOWS.map(w => (
-            <button
-              key={w.id}
-              type="button"
-              className={`chart-range-btn ${w.id === windowId ? 'is-active' : ''}`}
-              onClick={() => setWindowId(w.id)}
-              aria-pressed={w.id === windowId}
-            >
-              {w.label}
-            </button>
-          ))}
-        </div>
+        {/* One offered window is no choice at all. */}
+        {offered.length > 1 && (
+          <div className="chart-range" role="group" aria-label="Time range">
+            {offered.map(w => (
+              <button
+                key={w.id}
+                type="button"
+                className={`chart-range-btn ${w.id === activeWindow ? 'is-active' : ''}`}
+                onClick={() => setWindowId(w.id)}
+                aria-pressed={w.id === activeWindow}
+              >
+                {w.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="chart-plot-wrap" ref={wrapRef}>
         {!domain ? (
-          <p className="chart-empty">
-            Nothing to plot yet — the timeline fills in as claude-mem records observations.
-          </p>
+          <p className="chart-empty">{emptyMessage}</p>
         ) : (
           <svg
             className="chart-plot"
@@ -213,7 +227,7 @@ export function ActivityTimeline({ observations, summaries, prompts }: ActivityT
                           cx={x}
                           cy={y}
                           r={DOT_R}
-                          className={`chart-dot chart-dot-${lane.key}`}
+                          className={`chart-dot chart-dot-${lane.tone}`}
                         />
                         <circle
                           cx={x}

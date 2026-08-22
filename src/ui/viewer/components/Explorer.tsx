@@ -1,14 +1,16 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { ObservationCard } from './ObservationCard';
 import { TreeGraph } from './TreeGraph';
+import { ExplorerDigest } from './ExplorerDigest';
+import { ExplorerActivity } from './ExplorerActivity';
 import { useExplorerDay } from '../hooks/useExplorerDay';
 import { splitIntoBlocks, GroupMode } from '../utils/explorerHierarchy';
 import { Observation } from '../types';
 
 const TABS = [
-  { id: 'tree', label: 'Tree', built: true },
-  { id: 'digest', label: 'Digest', built: false },
-  { id: 'activity', label: 'Activity', built: false },
+  { id: 'tree', label: 'Tree' },
+  { id: 'digest', label: 'Digest' },
+  { id: 'activity', label: 'Activity' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -142,8 +144,6 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
     detailRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [selected?.id]);
 
-  const currentTab = TABS.find(t => t.id === tab)!;
-
   return (
     <div className="page explorer">
       <header className="page-head">
@@ -157,10 +157,8 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
             key={t.id}
             role="tab"
             aria-selected={tab === t.id}
-            className={`explorer-tab${tab === t.id ? ' is-active' : ''}${t.built ? '' : ' is-soon'}`}
-            onClick={() => t.built && setTab(t.id)}
-            disabled={!t.built}
-            title={t.built ? undefined : 'Not built yet'}
+            className={`explorer-tab${tab === t.id ? ' is-active' : ''}`}
+            onClick={() => setTab(t.id)}
           >
             {t.label}
           </button>
@@ -176,7 +174,7 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
 
         {/* With one block the day is the block, and by project every control
             here is permanently disabled — a dead control is worse than none. */}
-        {mode === 'time' && blocks.length > 1 && (
+        {tab === 'tree' && mode === 'time' && blocks.length > 1 && (
           <div className="explorer-stepper">
             <button type="button" onClick={() => stepBlock(-1)} disabled={blockIndex <= 0} aria-label="Previous time block">‹</button>
             <span className="explorer-stepper-value">{blockLabel}</span>
@@ -185,19 +183,27 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
           </div>
         )}
 
+        {/* Grouping is a property of the tree; the other two tabs read the
+            whole day and would show an inert pair of buttons. */}
+        {tab === 'tree' && (
         <div className="explorer-modes" role="group" aria-label="Group by">
           <button type="button" className={`explorer-mode${mode === 'time' ? ' is-active' : ''}`} aria-pressed={mode === 'time'} onClick={() => setMode('time')}>By Time</button>
           <button type="button" className={`explorer-mode${mode === 'app' ? ' is-active' : ''}`} aria-pressed={mode === 'app'} onClick={() => setMode('app')}>By Project</button>
         </div>
+        )}
       </div>
 
-      {!currentTab.built ? (
-        <div className="tree-graph-empty">{currentTab.label} is not built yet.</div>
-      ) : isLoading && data.observations.length === 0 ? (
+      {isLoading && data.observations.length === 0 ? (
         <div className="tree-graph-empty">Loading…</div>
       ) : error && data.observations.length === 0 ? (
         <div className="tree-graph-empty">Could not load: {error}</div>
-      ) : data.day ? (
+      ) : !data.day ? (
+        <div className="tree-graph-empty">No observations recorded yet.</div>
+      ) : tab === 'digest' ? (
+        <ExplorerDigest observations={data.observations} />
+      ) : tab === 'activity' ? (
+        <ExplorerActivity observations={data.observations} />
+      ) : (
         <TreeGraph
           day={data.day}
           observations={data.observations}
@@ -207,11 +213,9 @@ export function Explorer({ currentFilter, liveObservationCount, selectedId, onSe
           currentBlockId={mode === 'time' && blocks.length > 1 ? `day-${data.day}-b${blockIndex}` : undefined}
           locate={locate}
         />
-      ) : (
-        <div className="tree-graph-empty">No observations recorded yet.</div>
       )}
 
-      {selected && (
+      {tab === 'tree' && selected && (
         <aside className="explorer-detail-panel" ref={detailRef} aria-label="Selected observation">
           <button type="button" className="explorer-detail-close" onClick={() => onSelect(undefined)} aria-label="Close">×</button>
           <ObservationCard observation={selected} />

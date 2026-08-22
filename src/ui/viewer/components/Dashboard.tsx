@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StatTiles } from './StatTiles';
-import { ActivityTimeline } from './ActivityTimeline';
+import { ActivityTimeline, TimelineLane, truncate } from './ActivityTimeline';
 import { Observation, Summary, UserPrompt, WorkerStats } from '../types';
 import { RouteId } from '../constants/nav';
 
@@ -23,6 +23,27 @@ export function Dashboard({
   currentFilter,
   onNavigate,
 }: DashboardProps) {
+  const lanes: TimelineLane[] = useMemo(() => [
+    {
+      key: 'observation',
+      label: 'Observations',
+      tone: 'observation',
+      marks: observations.map(o => ({ epoch: o.created_at_epoch, label: truncate(o.title ?? o.text) })),
+    },
+    {
+      key: 'summary',
+      label: 'Summaries',
+      tone: 'summary',
+      marks: summaries.map(s => ({ epoch: s.created_at_epoch, label: truncate(s.request ?? s.completed) })),
+    },
+    {
+      key: 'prompt',
+      label: 'Prompts',
+      tone: 'prompt',
+      marks: prompts.map(p => ({ epoch: p.created_at_epoch, label: truncate(p.prompt_text) })),
+    },
+  ], [observations, summaries, prompts]);
+
   return (
     <div className="page">
       <header className="page-head">
@@ -34,11 +55,7 @@ export function Dashboard({
 
       <StatTiles stats={stats} error={statsError} />
 
-      <ActivityTimeline
-        observations={observations}
-        summaries={summaries}
-        prompts={prompts}
-      />
+      <ActivityTimeline lanes={lanes} />
 
       <button type="button" className="recall-cta" onClick={() => onNavigate('recall')}>
         <span className="recall-cta-text">

@@ -2896,11 +2896,6 @@
       font-weight: 600;
     }
 
-    .explorer-tab.is-soon {
-      cursor: not-allowed;
-      opacity: 0.55;
-    }
-
     .explorer-toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -3151,6 +3146,73 @@
     .explorer-detail-close:hover {
       color: var(--color-text-primary);
       background: var(--color-bg-card-hover);
+    }
+
+    /* Explorer Digest: the day in numbers, counted from the same rows the
+       tree draws. */
+    .digest-breakdown {
+      margin-top: 22px;
+    }
+
+    .digest-breakdown-title {
+      margin: 0 0 10px;
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .digest-rows {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .digest-row {
+      display: grid;
+      /* A fixed name column keeps every bar starting on the same line, so the
+         lengths can be compared without measuring from different origins. */
+      grid-template-columns: 110px 1fr 44px;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 0;
+    }
+
+    .digest-row-name {
+      color: var(--color-text-primary);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .digest-row-bar {
+      height: 10px;
+      border-radius: 5px;
+      background: var(--color-bg-stat);
+      overflow: hidden;
+    }
+
+    .digest-row-fill {
+      display: block;
+      height: 100%;
+      border-radius: 5px;
+      background: var(--color-chart-observation);
+    }
+
+    .digest-row-count {
+      color: var(--color-text-secondary);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    @media (max-width: 560px) {
+      .digest-row {
+        grid-template-columns: 88px 1fr 38px;
+        gap: 8px;
+      }
     }
 
     /* Chat: one question, one answer, and the walk that produced it. */
