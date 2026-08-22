@@ -130,6 +130,42 @@ test('the console on the page is the drawer console without the drawer', async (
   await expect(drawer.getByTitle('Close console')).toHaveCount(1);
 });
 
+test('the three sidebar controls sit beside each other, none covering another', async ({ page }) => {
+  // The console toggle used to be a floating button parked on top of this
+  // row, hiding the theme toggle underneath it.
+  await openSystem(page);
+
+  // The header's help button shares the .settings-btn class, so scope to the
+  // sidebar footer.
+  const controls = ['.sidebar-footer .theme-toggle-btn', '.sidebar-footer .settings-btn', '.sidebar-footer .console-toggle-btn'];
+  const boxes = [];
+  for (const selector of controls) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box, `${selector} has no box`).not.toBeNull();
+    boxes.push(box!);
+  }
+
+  for (let a = 0; a < boxes.length; a += 1) {
+    for (let b = a + 1; b < boxes.length; b += 1) {
+      const overlaps =
+        boxes[a].x < boxes[b].x + boxes[b].width && boxes[b].x < boxes[a].x + boxes[a].width &&
+        boxes[a].y < boxes[b].y + boxes[b].height && boxes[b].y < boxes[a].y + boxes[a].height;
+      expect(overlaps, `${controls[a]} overlaps ${controls[b]}`).toBe(false);
+    }
+  }
+
+  // And each one is the element actually receiving a click at its own centre.
+  for (const selector of controls) {
+    const owner = await page.evaluate(sel => {
+      const el = document.querySelector(sel) as HTMLElement;
+      const box = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return el.contains(hit);
+    }, selector);
+    expect(owner, `${selector} is covered by something else`).toBe(true);
+  }
+});
+
 test('the page holds together at 375x812 with no horizontal document scroll', async ({ page }) => {
   await stubJson(page, '**/api/health', {
     status: 'degraded', version: '13.15.3', pid: 1, uptime: 60,

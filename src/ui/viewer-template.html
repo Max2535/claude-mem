@@ -420,7 +420,8 @@
     }
 
     .settings-btn,
-    .theme-toggle-btn {
+    .theme-toggle-btn,
+    .console-toggle-btn {
       background: var(--color-bg-card);
       border: 1px solid var(--color-border-primary);
       border-radius: 6px;
@@ -437,7 +438,8 @@
     }
 
     .settings-btn:hover,
-    .theme-toggle-btn:hover {
+    .theme-toggle-btn:hover,
+    .console-toggle-btn:hover {
       background: var(--color-bg-card-hover);
       border-color: var(--color-border-focus);
       color: var(--color-text-primary);
@@ -531,7 +533,8 @@
     }
 
     .settings-icon,
-    .theme-toggle-btn svg {
+    .theme-toggle-btn svg,
+    .console-toggle-btn svg {
       width: 18px;
       height: 18px;
     }
@@ -1483,6 +1486,7 @@
 
       .settings-btn,
       .theme-toggle-btn,
+      .console-toggle-btn,
       .icon-link {
         width: 32px;
         height: 32px;
@@ -1491,6 +1495,7 @@
 
       .settings-icon,
       .theme-toggle-btn svg,
+      .console-toggle-btn svg,
       .icon-link svg {
         width: 16px;
         height: 16px;
@@ -2027,36 +2032,6 @@
     }
 
     /* Console Drawer - Chrome DevTools Style */
-    .console-toggle-btn {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: var(--color-bg-button);
-      border: none;
-      color: white;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      transition: all 0.2s ease;
-      z-index: 999;
-    }
-
-    .console-toggle-btn:hover {
-      background: var(--color-bg-button-hover);
-      transform: scale(1.05);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
-    }
-
-    .console-toggle-btn svg {
-      width: 20px;
-      height: 20px;
-    }
-
     .console-drawer {
       position: fixed;
       bottom: 0;

@@ -12,6 +12,8 @@ interface SidebarProps {
   themePreference: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
   onSettingsToggle: () => void;
+  onLogsToggle: () => void;
+  logsOpen: boolean;
 }
 
 export function Sidebar({
@@ -22,6 +24,8 @@ export function Sidebar({
   themePreference,
   onThemeChange,
   onSettingsToggle,
+  onLogsToggle,
+  logsOpen,
 }: SidebarProps) {
   // The logomark lives here now, so the favicon it mirrors is driven from here too.
   useSpinningFavicon(isProcessing);
@@ -86,6 +90,24 @@ export function Sidebar({
           <svg className="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
             <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
+        {/* The console used to float over this row and cover the theme
+            toggle. It is a global control like its neighbours, so it stands
+            with them. The open drawer covers this whole row, so the pressed
+            state is carried by aria-pressed alone — a highlight here could
+            never be seen. */}
+        <button
+          type="button"
+          className="console-toggle-btn"
+          onClick={onLogsToggle}
+          title="Toggle Console"
+          aria-label="Toggle Console"
+          aria-pressed={logsOpen}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
           </svg>
         </button>
       </div>
