@@ -53,3 +53,6 @@ docker/install-test/
 reports/
 test-results/
 playwright-report/
+
+# Serena tool config (local, not part of distribution)
+.serena/
