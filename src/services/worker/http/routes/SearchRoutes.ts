@@ -10,7 +10,8 @@ import { validateBody } from '../middleware/validateBody.js';
 import { logger } from '../../../../utils/logger.js';
 import { groupByDate } from '../../../../shared/timeline-formatting.js';
 import { countObservationsByProjects } from '../../../context/ObservationCompiler.js';
-import { withObserverHealthWarning } from '../../../context/ContextBuilder.js';
+import { withStartupWarnings } from '../../../context/ContextBuilder.js';
+import { clearHookFailures } from '../../../../shared/hook-breadcrumb.js';
 import { SettingsDefaultsManager } from '../../../../shared/SettingsDefaultsManager.js';
 import { USER_SETTINGS_PATH } from '../../../../shared/paths.js';
 import type { ObservationSearchResult, SessionSummarySearchResult } from '../../../sqlite/types.js';
@@ -324,7 +325,7 @@ export class SearchRoutes extends BaseRouteHandler {
         // A project with zero observations is exactly where a failing observer
         // hides: without this the health warning (applied inside
         // generateContextWithStats) never reached the user this early-return serves.
-        res.send(withObserverHealthWarning(hintBody));
+        res.send(withStartupWarnings(hintBody));
         return;
       }
     }
@@ -387,6 +388,12 @@ export class SearchRoutes extends BaseRouteHandler {
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(contextResult.text);
+
+    // Consume the breadcrumb only here, and only after the response carrying
+    // the warning has gone out. Every other surface that renders the warning
+    // (the viewer, --full) leaves the file alone, so SessionStart — the one
+    // place the user reliably reads it — is never beaten to it.
+    clearHookFailures();
   });
 
   private handleSemanticContext = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {

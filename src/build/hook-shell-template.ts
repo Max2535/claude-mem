@@ -45,6 +45,25 @@ export interface ShellTemplateOptions {
   /** stderr message when no candidate root resolves. */
   notFoundMessage: string;
   /**
+   * Label written into the breadcrumb when resolution fails, e.g.
+   * 'SessionStart:context'. The breadcrumb is the ONLY record a failed hook
+   * leaves: it exits before Node runs, so nothing in src/ can log it, and
+   * Claude Code discards hook stderr. Without this the failure is invisible —
+   * seven ~/swift sessions were dropped over five weeks and the only surviving
+   * trace was the raw error text embedded in the transcripts themselves.
+   */
+  failureSite?: string;
+  /**
+   * Hook-result JSON echoed on stdout when resolution fails, replacing the
+   * silent `exit 1` with a user-visible advisory. Only ONE site sets this (the
+   * SessionStart context hook): PostToolUse fires on every tool call, so
+   * warning from there would spam a whole session. A second JSON document on
+   * stdout is invalid JSON and makes Claude Code discard the payload, so this
+   * is mutually exclusive with `trailingJson` and with any command that emits
+   * its own status JSON.
+   */
+  notFoundJson?: object;
+  /**
    * MCP-only: extra candidate roots enumerated before the cache directories
    * (e.g. '$PWD/plugin', '$PWD'). Ignored for non-mcp hosts.
    */
@@ -156,6 +175,70 @@ function candidateBlock(options: ShellTemplateOptions): string {
   );
 }
 
+/**
+ * The breadcrumb file every failed resolution appends one line to. Read back by
+ * the SessionStart context path, which reports and then truncates it.
+ */
+export const BREADCRUMB_FILENAME = 'hook-resolution-failures.log';
+
+/**
+ * POSIX-shell breadcrumb append. Resolution has already failed here, so this
+ * cannot call any plugin script — it is hand-written shell or nothing.
+ *
+ * Only CLAUDE_MEM_DATA_DIR is honoured; a data dir set in settings.json is not,
+ * because parsing JSON in a hook prelude is more fragile than the breadcrumb is
+ * worth. The reader compensates by checking the default location too.
+ *
+ * Every redirection is guarded: a breadcrumb that fails to write must not add a
+ * second failure on top of the one it is reporting.
+ */
+function shellBreadcrumbClause(site: string): string {
+  return (
+    `_MD="\${CLAUDE_MEM_DATA_DIR:-$HOME/.claude-mem}"; ` +
+    `case "$_MD" in "~/"*) _MD="$HOME/\${_MD#~/}";; esac; ` +
+    `mkdir -p "$_MD" 2>/dev/null; ` +
+    `printf '%s\\t%s\\t%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$PWD" "${site}" ` +
+    `>> "$_MD/${BREADCRUMB_FILENAME}" 2>/dev/null;`
+  );
+}
+
+/** The same breadcrumb for the two Node-based launchers (MCP, Codex/Windows). */
+function nodeBreadcrumbStatement(site: string, fsVar: string, pathVar: string, homeVar: string): string {
+  return (
+    `try{const _D=process.env.CLAUDE_MEM_DATA_DIR||${pathVar}.join(${homeVar},'.claude-mem');` +
+    `${fsVar}.mkdirSync(_D,{recursive:true});` +
+    `${fsVar}.appendFileSync(${pathVar}.join(_D,${JSON.stringify(BREADCRUMB_FILENAME)}),` +
+    `new Date().toISOString()+'\\t'+process.cwd()+'\\t'+${JSON.stringify(site)}+'\\n')}catch{}`
+  );
+}
+
+/**
+ * The `[ -n "$_P" ] || { ... }` group that runs when nothing resolved.
+ *
+ * With `notFoundJson` the hook exits 0 after echoing a valid hook result, so
+ * Claude Code shows the advisory instead of treating the hook as failed.
+ * Without it the historical `exit 1` is unchanged.
+ */
+function notFoundClause(options: ShellTemplateOptions): string {
+  const parts: string[] = [];
+  if (options.failureSite) {
+    parts.push(shellBreadcrumbClause(options.failureSite));
+  }
+  parts.push(`echo "${options.notFoundMessage}" >&2;`);
+  if (options.notFoundJson) {
+    const json = JSON.stringify(options.notFoundJson);
+    if (json.includes("'")) {
+      // The echo below is single-quoted; a quote inside would end the string
+      // early and emit shell garbage where Claude Code expects JSON.
+      throw new Error('buildShellCommand: notFoundJson must not contain a single quote');
+    }
+    parts.push(`echo '${json}'; exit 0;`);
+  } else {
+    parts.push('exit 1;');
+  }
+  return `[ -n "$_P" ] || { ${parts.join(' ')} };`;
+}
+
 const CYGPATH_CLAUSE =
   `command -v cygpath >/dev/null 2>&1 && { _W=$(cygpath -w "$_P" 2>/dev/null); [ -n "$_W" ] && _P="$_W"; };`;
 
@@ -229,7 +312,7 @@ function buildMcpNodeLauncher(options: ShellTemplateOptions): string {
     `const K=[${kParts}].filter(Boolean);` +
     `let R=null;` +
     `for(const k of K){const r=f.existsSync(p.join(k,'plugin','scripts'))?p.join(k,'plugin'):k;if(f.existsSync(p.join(r,'scripts',${require}))){R=r;break}}` +
-    `if(!R){process.stderr.write(${notFound});process.exit(1)}` +
+    `if(!R){${options.failureSite ? nodeBreadcrumbStatement(options.failureSite, 'f', 'p', 'h') + ';' : ''}process.stderr.write(${notFound});process.exit(1)}` +
     `const ch=c.spawn(process.execPath,[p.join(R,'scripts',${require})],{stdio:'inherit',windowsHide:true});` +
     `for(const s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,()=>{try{ch.kill(s)}catch{}});` +
     `ch.on('exit',(code,sig)=>{if(sig){process.removeAllListeners(sig);try{process.kill(process.pid,sig)}catch{process.exit(1)}}else process.exit(code==null?0:code)})`
@@ -246,6 +329,8 @@ function jsArray(values: string[]): string {
 
 export interface CodexWindowsCommandOptions {
   startupVersionCheck?: boolean;
+  /** Breadcrumb label, mirroring ShellTemplateOptions.failureSite. */
+  failureSite?: string;
 }
 
 /**
@@ -274,7 +359,7 @@ export function buildCodexWindowsCommand(
     "roots.push(p.join(C,'plugins','marketplaces','max2535','plugin'));",
     "let R=null;",
     "for(const k of roots){const r=fs.existsSync(p.join(k,'plugin','scripts'))?p.join(k,'plugin'):k;if(fs.existsSync(p.join(r,'scripts','bun-runner.js'))&&fs.existsSync(p.join(r,'scripts','worker-service.cjs'))){R=r;break}}",
-    "if(!R){process.stderr.write('claude-mem: plugin scripts not found\\n');process.exit(1)}",
+    `if(!R){${options.failureSite ? nodeBreadcrumbStatement(options.failureSite, 'fs', 'p', 'h') + ';' : ''}process.stderr.write('claude-mem: plugin scripts not found\\n');process.exit(1)}`,
     "const env={...process.env,CLAUDE_MEM_CODEX_HOOK:'1'};",
   ];
 
@@ -320,7 +405,7 @@ export function buildShellCommand(options: ShellTemplateOptions): string {
   parts.push('_C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}";');
   parts.push('_E="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-}}";');
   parts.push(candidateBlock(options));
-  parts.push(`[ -n "$_P" ] || { echo "${options.notFoundMessage}" >&2; exit 1; };`);
+  parts.push(notFoundClause(options));
 
   // cygpath conversion: claude-code + codex-cli. MCP returned early above (it
   // uses the Node launcher), so every host reaching here needs the clause.

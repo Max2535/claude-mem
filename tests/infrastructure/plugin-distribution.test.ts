@@ -332,12 +332,13 @@ const claudeHook = (tail: string[], extra: Record<string, unknown> = {}) => buil
   host: 'claude-code', requireFile: 'bun-runner.js', requireFileSecondary: 'worker-service.cjs',
   trailingCommand: ccTrailing(...tail), notFoundMessage: 'claude-mem: plugin scripts not found', ...extra,
 });
-const codexHook = (tail: string[]) => buildShellCommand({
+const codexHook = (tail: string[], extra: Record<string, unknown> = {}) => buildShellCommand({
   host: 'codex-cli', requireFile: 'bun-runner.js', requireFileSecondary: 'worker-service.cjs',
   trailingCommand: ccTrailing(...tail), notFoundMessage: 'claude-mem: plugin scripts not found',
-  extraEnv: { CLAUDE_MEM_CODEX_HOOK: '1' },
+  extraEnv: { CLAUDE_MEM_CODEX_HOOK: '1' }, ...extra,
 });
 const codexStartupHook = () => buildShellCommand({
+  failureSite: 'codex:SessionStart:context',
   host: 'codex-cli', requireFile: 'bun-runner.js', requireFileSecondary: 'worker-service.cjs',
   trailingCommand: [
     '_V=$(CLAUDE_MEM_CODEX_HOOK=1 node "$_P/scripts/version-check.js" || true);',
@@ -347,8 +348,13 @@ const codexStartupHook = () => buildShellCommand({
   ],
   notFoundMessage: 'claude-mem: plugin scripts not found',
 });
-const codexHookPair = (tail: string[], options: { startupVersionCheck?: boolean } = {}) => ({
-  command: options.startupVersionCheck ? codexStartupHook() : codexHook(tail),
+const codexHookPair = (
+  tail: string[],
+  options: { startupVersionCheck?: boolean; failureSite?: string } = {},
+) => ({
+  command: options.startupVersionCheck
+    ? codexStartupHook()
+    : codexHook(tail, { failureSite: options.failureSite }),
   commandWindows: buildCodexWindowsCommand(tail, options),
 });
 
@@ -360,6 +366,7 @@ const RULE_A_EXPECTATIONS: Record<string, Record<string, RuleAExpectation>> = {
       host: 'claude-code-setup', requireFile: 'version-check.js',
       trailingCommand: ['node', '"$_P/scripts/version-check.js"'],
       notFoundMessage: 'claude-mem: version-check.js not found',
+      failureSite: 'Setup:version-check',
     }),
     // `start` already prints its own single, valid status JSON
     // (buildStatusOutput → {"continue":true,"status":"ready","suppressOutput":true}),
@@ -367,19 +374,49 @@ const RULE_A_EXPECTATIONS: Record<string, Record<string, RuleAExpectation>> = {
     // concatenate two JSON documents on stdout, which Claude Code cannot parse,
     // causing it to ignore suppressOutput and render the raw JSON at the top of
     // every session.
-    'SessionStart.0.0': claudeHook(['start']),
-    'SessionStart.0.1': claudeHook(['hook', 'claude-code', 'context']),
-    'UserPromptSubmit.0.0': claudeHook(['hook', 'claude-code', 'session-init']),
-    'PostToolUse.0.0': claudeHook(['hook', 'claude-code', 'observation']),
-    'PreToolUse.0.0': claudeHook(['hook', 'claude-code', 'file-context']),
-    'Stop.0.0': claudeHook(['hook', 'claude-code', 'summarize']),
+    'SessionStart.0.0': claudeHook(['start'], { failureSite: 'SessionStart:start' }),
+    // The only site that echoes a hook result when resolution fails. It runs
+    // once per session and already carries a user-visible systemMessage, so the
+    // advisory cannot spam the session or collide with another hook's status
+    // JSON. tests/infrastructure/hook-resolution-failure.test.ts runs the
+    // generated shell and parses this JSON for real.
+    'SessionStart.0.1': claudeHook(['hook', 'claude-code', 'context'], {
+      failureSite: 'SessionStart:context',
+      notFoundJson: {
+        continue: true,
+        hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: '' },
+        systemMessage:
+          'claude-mem could not locate its plugin scripts, so nothing was loaded or recorded '
+          + 'for this session. Reinstall with: claude plugin install claude-mem-pro-max@max2535',
+      },
+    }),
+    'UserPromptSubmit.0.0': claudeHook(['hook', 'claude-code', 'session-init'], {
+      failureSite: 'UserPromptSubmit:session-init',
+    }),
+    'PostToolUse.0.0': claudeHook(['hook', 'claude-code', 'observation'], {
+      failureSite: 'PostToolUse:observation',
+    }),
+    'PreToolUse.0.0': claudeHook(['hook', 'claude-code', 'file-context'], {
+      failureSite: 'PreToolUse:file-context',
+    }),
+    'Stop.0.0': claudeHook(['hook', 'claude-code', 'summarize'], { failureSite: 'Stop:summarize' }),
   },
   'plugin/hooks/codex-hooks.json': {
-    'SessionStart.0.0': codexHookPair(['hook', 'codex', 'context'], { startupVersionCheck: true }),
-    'UserPromptSubmit.0.0': codexHookPair(['hook', 'codex', 'session-init']),
-    'PreToolUse.0.0': codexHookPair(['hook', 'codex', 'file-context']),
-    'PostToolUse.0.0': codexHookPair(['hook', 'codex', 'observation']),
-    'Stop.0.0': codexHookPair(['hook', 'codex', 'summarize']),
+    'SessionStart.0.0': codexHookPair(['hook', 'codex', 'context'], {
+      startupVersionCheck: true, failureSite: 'codex:SessionStart:context',
+    }),
+    'UserPromptSubmit.0.0': codexHookPair(['hook', 'codex', 'session-init'], {
+      failureSite: 'codex:UserPromptSubmit:session-init',
+    }),
+    'PreToolUse.0.0': codexHookPair(['hook', 'codex', 'file-context'], {
+      failureSite: 'codex:PreToolUse:file-context',
+    }),
+    'PostToolUse.0.0': codexHookPair(['hook', 'codex', 'observation'], {
+      failureSite: 'codex:PostToolUse:observation',
+    }),
+    'Stop.0.0': codexHookPair(['hook', 'codex', 'summarize'], {
+      failureSite: 'codex:Stop:summarize',
+    }),
   },
 };
 
@@ -388,6 +425,7 @@ const MCP_EXPECTED = buildShellCommand({
   // trailingCommand, so none is passed (see buildMcpNodeLauncher).
   host: 'mcp', requireFile: 'mcp-server.cjs',
   notFoundMessage: 'claude-mem: mcp server not found',
+  failureSite: 'mcp:search',
   mcpExtraCandidates: ['$PWD/plugin', '$PWD'],
   mcpExtraCacheRoots: [
     '$HOME/.codex/plugins/cache/claude-mem-local/claude-mem',
