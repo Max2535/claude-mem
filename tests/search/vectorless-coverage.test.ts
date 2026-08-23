@@ -35,9 +35,19 @@ describe('computeSourceCoverage', () => {
     const coverage = computeSourceCoverage(indexed, matched);
     expect(coverage.indexed).toEqual({ claude: 2, codex: 1, browser: 1 }); // undefined → 'claude'
     expect(coverage.matched).toEqual({ claude: 1, browser: 1 });
+    // No denominator supplied: the index IS the whole filtered set by definition.
+    expect(coverage.total).toEqual({ claude: 2, codex: 1, browser: 1 });
+    expect(coverage.truncated).toEqual({ claude: false, codex: false, browser: false });
+  });
+
+  test('a denominator larger than the index marks that source truncated', () => {
+    const indexed = [obs(1, 'claude'), obs(2, 'codex')];
+    const coverage = computeSourceCoverage(indexed, [indexed[0]], { claude: 900, codex: 1 });
+    expect(coverage.total).toEqual({ claude: 900, codex: 1 });
+    expect(coverage.truncated).toEqual({ claude: true, codex: false });
   });
 
   test('empty inputs produce empty maps', () => {
-    expect(computeSourceCoverage([], [])).toEqual({ indexed: {}, matched: {} });
+    expect(computeSourceCoverage([], [])).toEqual({ indexed: {}, matched: {}, total: {}, truncated: {} });
   });
 });

@@ -253,6 +253,59 @@ export class SessionSearch {
     }
   }
 
+  /**
+   * How many observations the filter matches per platform source, ignoring
+   * limit/offset. The vectorless walk indexes at most maxIndexRows and would
+   * otherwise report coverage against its own truncated index — "nothing
+   * found" and "nothing found in the slice that was read" would look the same.
+   *
+   * Deliberately a COUNT with no row payload: the same filters searchObservations
+   * uses, all seekable (project, epoch range, type), joined to sdk_sessions on
+   * its UNIQUE memory_session_id for the source label. It reads no observation
+   * columns, so it does not reintroduce the every-row read that getExplorerDay
+   * was fixed for, and it runs once per walk rather than once per row.
+   */
+  countObservationsBySource(options: SearchOptions = {}): Record<string, number> {
+    const params: any[] = [];
+    const {
+      limit: _limit,
+      offset: _offset,
+      orderBy: _orderBy,
+      allowUnfiltered = false,
+      excludeObserverSessions = false,
+      ...filters
+    } = options;
+
+    const userFilterClause = this.buildFilterClause(filters, params, 'o');
+    if (!userFilterClause && !allowUnfiltered) {
+      throw new AppError(SessionSearch.MISSING_SEARCH_INPUT_MESSAGE, 400, 'INVALID_SEARCH_REQUEST');
+    }
+
+    let filterClause = userFilterClause;
+    if (excludeObserverSessions) {
+      params.push(OBSERVER_SESSIONS_PROJECT);
+      filterClause = filterClause ? `${filterClause} AND o.project != ?` : 'o.project != ?';
+    }
+
+    const sql = `
+      SELECT COALESCE(NULLIF(s.platform_source, ''), '${DEFAULT_PLATFORM_SOURCE}') AS source, COUNT(*) AS total
+      FROM observations o
+      LEFT JOIN sdk_sessions s ON s.memory_session_id = o.memory_session_id
+      WHERE ${filterClause || '1=1'}
+      GROUP BY source
+    `;
+
+    const rows = this.db.prepare(sql).all(...params) as { source: string; total: number }[];
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      // Alias normalization can merge two raw values onto one source, so add
+      // rather than assign.
+      const source = normalizePlatformSource(row.source);
+      counts[source] = (counts[source] ?? 0) + row.total;
+    }
+    return counts;
+  }
+
   searchObservations(query: string | undefined, options: SearchOptions = {}): ObservationSearchResult[] {
     const params: any[] = [];
     const {

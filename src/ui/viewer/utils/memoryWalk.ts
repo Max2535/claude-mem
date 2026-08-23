@@ -94,11 +94,25 @@ export interface WalkStep {
  * pass only happens when the day count exceeds the configured limit, so on a
  * small database `rounds` is 1 and there is no narrowing step to show.
  */
-export function describeWalk(traversal: MemoryWalkTraversal, matched: number): WalkStep[] {
+export function describeWalk(
+  traversal: MemoryWalkTraversal,
+  matched: number,
+  coverage?: MemoryWalkCoverage
+): WalkStep[] {
+  // The index is capped, so the row count alone reads as "this is what there
+  // was". Say what it was cut from whenever the server reports a denominator
+  // larger than the slice the walk actually saw.
+  const total = coverage?.total
+    ? Object.values(coverage.total).reduce((sum, count) => sum + count, 0)
+    : 0;
+  const truncated = total > traversal.indexRows;
+
   const steps: WalkStep[] = [
     {
       label: 'Built the index',
-      detail: `${plural(traversal.indexRows, 'observation')} read straight from SQLite — nothing cached, nothing embedded.`,
+      detail: truncated
+        ? `${plural(traversal.indexRows, 'observation')} read straight from SQLite — nothing cached, nothing embedded. That is the newest ${traversal.indexRows} of ${plural(total, 'observation')} matching this search; the rest was never looked at.`
+        : `${plural(traversal.indexRows, 'observation')} read straight from SQLite — nothing cached, nothing embedded.`,
     },
   ];
 

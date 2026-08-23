@@ -121,6 +121,27 @@ describe('describeWalk', () => {
     // One of each: the singular must not read "1 observations".
     expect(steps[2].detail).toBe('1 observation across 1 session.');
   });
+
+  // Without the denominator the first step reads as "this is what there was",
+  // which on a capped index is the silent-truncation bug the number exists for.
+  it('says what the index was cut from when the cap truncated it', () => {
+    const steps = describeWalk(
+      { rounds: 1, daysWalked: ['a'], sessionsWalked: ['s'], indexRows: 500 },
+      3,
+      { indexed: { claude: 500 }, matched: { claude: 3 }, total: { claude: 6000, codex: 92 }, truncated: { claude: true, codex: true } }
+    );
+    expect(steps[0].detail).toContain('6092 observations');
+    expect(steps[0].detail).toContain('never looked at');
+  });
+
+  it('stays quiet about truncation when the index holds the whole filtered set', () => {
+    const steps = describeWalk(
+      { rounds: 1, daysWalked: ['a'], sessionsWalked: ['s'], indexRows: 81 },
+      3,
+      { indexed: { claude: 81 }, matched: { claude: 3 }, total: { claude: 81 }, truncated: { claude: false } }
+    );
+    expect(steps[0].detail).not.toContain('never looked at');
+  });
 });
 
 describe('unmatchedSources', () => {

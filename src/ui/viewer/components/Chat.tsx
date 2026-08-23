@@ -41,7 +41,7 @@ function TurnBody({ turn }: { turn: ChatTurn }) {
 
       {turn.traversal && (
         <ol className="chat-walk">
-          {describeWalk(turn.traversal, turn.observations.length).map(step => (
+          {describeWalk(turn.traversal, turn.observations.length, turn.coverage).map(step => (
             <li key={step.label} className="chat-step">
               <span className="chat-step-label">{step.label}</span>
               <span className="chat-step-detail">{step.detail}</span>

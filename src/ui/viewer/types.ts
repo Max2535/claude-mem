@@ -191,6 +191,10 @@ export interface MemoryWalkTraversal {
 export interface MemoryWalkCoverage {
   indexed: Record<string, number>;
   matched: Record<string, number>;
+  /** What the filter matched in SQLite before the index cap — the denominator. */
+  total?: Record<string, number>;
+  /** Per source: the index held less than the filter matched. */
+  truncated?: Record<string, boolean>;
 }
 
 /**

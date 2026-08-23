@@ -54,6 +54,14 @@ export interface StrategySearchOptions extends ExtendedSearchOptions {
 export interface SourceCoverage {
   indexed: Record<string, number>;
   matched: Record<string, number>;
+  /**
+   * Rows matching the caller's filter BEFORE maxIndexRows capped the index —
+   * a COUNT query, never the length of a fetched array. Without it "no match"
+   * and "no match in the 8% of memory that was searched" read identically.
+   */
+  total: Record<string, number>;
+  /** Per source: the filter matches more rows than the index could hold. */
+  truncated: Record<string, boolean>;
 }
 
 export interface TraversalTrace {

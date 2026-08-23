@@ -27,13 +27,12 @@ export class VectorlessSearchStrategy {
       dateRange,
     } = options;
 
-    // Index is rebuilt from SQLite per query — nothing persisted, so it cannot go stale.
-    const indexRows: ObservationSearchResult[] = this.sessionSearch.searchObservations(undefined, {
+    // The filters the index is built from. Reused verbatim for the denominator
+    // below so the two cannot describe different sets.
+    const indexFilters = {
       project,
       platformSource,
       dateRange,
-      limit: this.config.maxIndexRows,
-      orderBy: 'date_desc',
       // A temporal_search may carry only a query; the walk still wants the
       // newest maxIndexRows rows rather than being rejected as unfiltered.
       allowUnfiltered: true,
@@ -41,13 +40,25 @@ export class VectorlessSearchStrategy {
       // own compression sessions, and the traversal can hand them back as
       // results — a leak no other observation reader has.
       excludeObserverSessions: true,
+    };
+
+    // Index is rebuilt from SQLite per query — nothing persisted, so it cannot go stale.
+    const indexRows: ObservationSearchResult[] = this.sessionSearch.searchObservations(undefined, {
+      ...indexFilters,
+      limit: this.config.maxIndexRows,
+      orderBy: 'date_desc',
     });
+
+    // The denominator the index was cut from. A COUNT, so the cap cannot hide
+    // behind it: on a 6,000-row database a 500-row index is 8% of memory, and
+    // a caller must be able to tell "not there" from "not in the 8% I read".
+    const totalBySource = this.sessionSearch.countObservationsBySource(indexFilters);
 
     const empty: StrategySearchResult = {
       results: { observations: [], sessions: [], prompts: [] },
       usedChroma: false,
       strategy: 'vectorless',
-      coverage: computeSourceCoverage(indexRows, []),
+      coverage: computeSourceCoverage(indexRows, [], totalBySource),
       traversal: { rounds: 0, daysWalked: [], sessionsWalked: [], indexRows: indexRows.length },
     };
     if (!query || indexRows.length === 0) return empty;
@@ -82,7 +93,7 @@ export class VectorlessSearchStrategy {
       results: { observations: matched, sessions: [], prompts: [] },
       usedChroma: false,
       strategy: 'vectorless',
-      coverage: computeSourceCoverage(indexRows, matched),
+      coverage: computeSourceCoverage(indexRows, matched, totalBySource),
       traversal: {
         rounds,
         daysWalked: walkedDays,

@@ -19,7 +19,16 @@ const ROWS = [
 ];
 
 function stubSearch(rows: ObservationSearchResult[]): SessionSearch {
-  return { searchObservations: () => rows } as unknown as SessionSearch;
+  // countObservationsBySource is the denominator the strategy reads straight
+  // from SQLite; with no cap in play here it agrees with the fetched rows.
+  return {
+    searchObservations: () => rows,
+    countObservationsBySource: () => rows.reduce((counts: Record<string, number>, row) => {
+      const source = row.platform_source ?? 'claude';
+      counts[source] = (counts[source] ?? 0) + 1;
+      return counts;
+    }, {}),
+  } as unknown as SessionSearch;
 }
 
 describe('VectorlessSearchStrategy', () => {
@@ -64,7 +73,7 @@ describe('VectorlessSearchStrategy', () => {
     const result = await strategy.search({ query: 'anything', limit: 20 });
     expect(called).toBe(0);
     expect(result.results.observations).toEqual([]);
-    expect(result.coverage).toEqual({ indexed: {}, matched: {} });
+    expect(result.coverage).toEqual({ indexed: {}, matched: {}, total: {}, truncated: {} });
   });
 
   test('ids not in candidate set are dropped', async () => {
