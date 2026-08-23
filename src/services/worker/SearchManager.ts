@@ -64,6 +64,11 @@ export function parseBoundedInt(value: unknown, min: number): number | undefined
   return Math.floor(parsed);
 }
 
+/** Comma-separated query params arrive as one string; SQL wants the list. */
+function splitCsv(value: string): string[] {
+  return value.split(',').map(part => part.trim()).filter(Boolean);
+}
+
 export class SearchManager {
   private orchestrator: SearchOrchestrator;
   private vectorlessStrategy: VectorlessSearchStrategy | null;
@@ -340,87 +345,88 @@ export class SearchManager {
     return lines;
   }
 
+  /**
+   * Search options that are ours to set, never the caller's. Both of them widen
+   * a search rather than narrow it, and normalizeParams' output is spread
+   * straight into SessionSearch.searchObservations — so they are declared here
+   * as literals and are unreachable from any caller-supplied object. Only the
+   * vectorless index walk turns them on, and it builds its own options object.
+   */
+  private static readonly INTERNAL_SEARCH_OPTIONS = {
+    allowUnfiltered: false,
+    excludeObserverSessions: false,
+  } as const;
+
+  /**
+   * Build the search options from named caller args, field by field.
+   *
+   * Every arg on this path is caller-supplied — HTTP query params off
+   * SearchRoutes, or MCP tool input — and the result is spread into SQL option
+   * objects. A denylist would have to grow a new `delete` line every time an
+   * internal option is added, and the one that gets forgotten is wire-reachable
+   * from the day it lands. So this copies out the fields a caller may set and
+   * nothing else: an unknown key cannot survive, whatever it is called.
+   */
   private normalizeParams(args: any): any {
-    const normalized: any = { ...args };
+    const raw: Record<string, any> = (args && typeof args === 'object') ? args : {};
+    const normalized: Record<string, any> = { ...SearchManager.INTERNAL_SEARCH_OPTIONS };
 
-    // Every arg on this path is caller-supplied — HTTP query params off
-    // SearchRoutes, or MCP tool input. Both of these are internal options that
-    // widen a search rather than narrow it, and args is spread straight into
-    // SessionSearch.searchObservations, so `?allowUnfiltered=true` would
-    // otherwise buy an unfiltered full-table read of every project.
-    delete normalized.allowUnfiltered;
-    delete normalized.excludeObserverSessions;
+    const set = (key: string, value: any): void => {
+      if (value !== undefined) normalized[key] = value;
+    };
 
-    if (normalized.filePath && !normalized.files) {
-      normalized.files = normalized.filePath;
-      delete normalized.filePath;
-    }
+    // Plain passthrough fields.
+    set('query', raw.query);
+    set('project', raw.project);
+    set('format', raw.format);
+    set('orderBy', raw.orderBy);
+    // Timeline params: timeline() and getTimelineByQuery() read these off the
+    // same normalized object.
+    set('anchor', raw.anchor);
+    set('depth_before', raw.depth_before);
+    set('depth_after', raw.depth_after);
+    set('mode', raw.mode);
 
-    if (normalized.concept && !normalized.concepts) {
-      normalized.concepts = normalized.concept;
-      delete normalized.concept;
-    }
+    // `filePath` and `concept` are the singular aliases the HTTP layer accepts;
+    // the plural form wins when both are present.
+    const files = raw.files ?? raw.filePath;
+    const concepts = raw.concepts ?? raw.concept;
+    set('files', typeof files === 'string' ? splitCsv(files) : files);
+    set('concepts', typeof concepts === 'string' ? splitCsv(concepts) : concepts);
+    set('obs_type', typeof raw.obs_type === 'string' ? splitCsv(raw.obs_type) : raw.obs_type);
+    set(
+      'type',
+      typeof raw.type === 'string' && raw.type.includes(',') ? splitCsv(raw.type) : raw.type
+    );
 
-    if (normalized.concepts && typeof normalized.concepts === 'string') {
-      normalized.concepts = normalized.concepts.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-
-    if (normalized.files && typeof normalized.files === 'string') {
-      normalized.files = normalized.files.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-
-    if (normalized.obs_type && typeof normalized.obs_type === 'string') {
-      normalized.obs_type = normalized.obs_type.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-
-    if (normalized.type && typeof normalized.type === 'string' && normalized.type.includes(',')) {
-      normalized.type = normalized.type.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-
-    const dateStart = normalized.dateStart ?? normalized.date_start ?? normalized.date_from;
-    const dateEnd = normalized.dateEnd ?? normalized.date_end ?? normalized.date_to;
+    const dateStart = raw.dateStart ?? raw.date_start ?? raw.date_from;
+    const dateEnd = raw.dateEnd ?? raw.date_end ?? raw.date_to;
     if (dateStart || dateEnd) {
-      normalized.dateRange = {
-        start: dateStart,
-        end: dateEnd
-      };
-    }
-    delete normalized.dateStart;
-    delete normalized.dateEnd;
-    delete normalized.date_start;
-    delete normalized.date_end;
-    delete normalized.date_from;
-    delete normalized.date_to;
-
-    // Same reasoning as parseBoundedInt's doc: these arrive as strings and are
-    // spread into the SQL options untouched.
-    if ('limit' in normalized) {
-      const limit = parseBoundedInt(normalized.limit, 1);
-      if (limit === undefined) delete normalized.limit;
-      else normalized.limit = limit;
-    }
-    if ('offset' in normalized) {
-      const offset = parseBoundedInt(normalized.offset, 0);
-      if (offset === undefined) delete normalized.offset;
-      else normalized.offset = offset;
+      normalized.dateRange = { start: dateStart, end: dateEnd };
+    } else {
+      set('dateRange', raw.dateRange);
     }
 
-    if (normalized.isFolder === 'true') {
+    // Same reasoning as parseBoundedInt's doc: these arrive as strings and
+    // would otherwise reach `LIMIT ?` as NaN.
+    if ('limit' in raw) set('limit', parseBoundedInt(raw.limit, 1));
+    if ('offset' in raw) set('offset', parseBoundedInt(raw.offset, 0));
+
+    if (raw.isFolder === 'true') {
       normalized.isFolder = true;
-    } else if (normalized.isFolder === 'false') {
+    } else if (raw.isFolder === 'false') {
       normalized.isFolder = false;
+    } else {
+      set('isFolder', raw.isFolder);
     }
 
     // Source-scoping (#2389): normalize the platform_source filter so that a
     // codex/cursor/etc. agent only sees its own memory. Accept both the
     // camelCase API param and the snake_case column name for robustness.
-    const rawPlatformSource = normalized.platformSource ?? normalized.platform_source;
+    const rawPlatformSource = raw.platformSource ?? raw.platform_source;
     if (typeof rawPlatformSource === 'string' && rawPlatformSource.trim()) {
       normalized.platformSource = normalizePlatformSource(rawPlatformSource);
-    } else {
-      delete normalized.platformSource;
     }
-    delete normalized.platform_source;
 
     return normalized;
   }

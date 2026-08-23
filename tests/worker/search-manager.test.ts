@@ -471,7 +471,10 @@ describe('SearchManager internal search options', () => {
   // args on these paths are HTTP query params (SearchRoutes.ts:177) or MCP tool
   // input, and they are spread straight into SessionSearch.searchObservations.
   // allowUnfiltered turns off the guard that stops a full-table read, so a
-  // caller must not be able to hand it to itself.
+  // caller must not be able to hand it to itself. normalizeParams now builds
+  // its output from named fields and declares both internal flags as literals,
+  // so a caller value does not survive — it is replaced by `false`, not merely
+  // deleted.
   it('drops caller-supplied allowUnfiltered from a filter-only search', async () => {
     const searchObservations = mock(() => []);
     await managerWith(searchObservations).search({
@@ -482,7 +485,7 @@ describe('SearchManager internal search options', () => {
 
     expect(searchObservations).toHaveBeenCalled();
     const options = (searchObservations as any).mock.calls[0][1];
-    expect(options.allowUnfiltered).toBeUndefined();
+    expect(options.allowUnfiltered).toBe(false);
   });
 
   it('drops it from searchObservations too, including the string form a query param arrives as', async () => {
@@ -495,8 +498,8 @@ describe('SearchManager internal search options', () => {
 
     expect(searchObservations).toHaveBeenCalled();
     const options = (searchObservations as any).mock.calls[0][1];
-    expect(options.allowUnfiltered).toBeUndefined();
-    expect(options.excludeObserverSessions).toBeUndefined();
+    expect(options.allowUnfiltered).toBe(false);
+    expect(options.excludeObserverSessions).toBe(false);
   });
 
   it('leaves real filters alone while stripping the internal ones', async () => {
@@ -510,7 +513,57 @@ describe('SearchManager internal search options', () => {
 
     const options = (searchObservations as any).mock.calls[0][1];
     expect(options.project).toBe('walk-project');
-    expect(options.allowUnfiltered).toBeUndefined();
+    expect(options.allowUnfiltered).toBe(false);
+  });
+
+  // The denylist this replaced only stopped the two options someone remembered
+  // to delete. The allowlist has to stop the option nobody has added yet, so
+  // the test is about an arbitrary unknown key, not about a named flag.
+  it('never lets an unknown caller key reach the SQL options', async () => {
+    const searchObservations = mock(() => []);
+    await managerWith(searchObservations).searchObservations({
+      query: 'restart',
+      project: 'walk-project',
+      someFutureInternalOption: true,
+      __proto__hack: 'nope',
+      'weird key': 1,
+    } as any);
+
+    const options = (searchObservations as any).mock.calls[0][1];
+    expect(options.someFutureInternalOption).toBeUndefined();
+    expect(options.__proto__hack).toBeUndefined();
+    expect(options['weird key']).toBeUndefined();
+    // The named fields still arrive.
+    expect(options.project).toBe('walk-project');
+  });
+
+  it('keeps every field a caller is allowed to set', async () => {
+    const searchObservations = mock(() => []);
+    await managerWith(searchObservations).searchObservations({
+      query: 'restart',
+      project: 'walk-project',
+      platformSource: 'codex',
+      limit: '5',
+      offset: '2',
+      orderBy: 'date_desc',
+      isFolder: 'true',
+      concept: 'worker,restart',
+      filePath: 'src/a.ts',
+      obs_type: 'bugfix',
+      date_start: '2026-07-01',
+      date_end: '2026-07-31',
+    });
+
+    const options = (searchObservations as any).mock.calls[0][1];
+    expect(options.project).toBe('walk-project');
+    expect(options.platformSource).toBe('codex');
+    expect(options.limit).toBe(5);
+    expect(options.offset).toBe(2);
+    expect(options.orderBy).toBe('date_desc');
+    expect(options.isFolder).toBe(true);
+    expect(options.concepts).toEqual(['worker', 'restart']);
+    expect(options.files).toEqual(['src/a.ts']);
+    expect(options.dateRange).toEqual({ start: '2026-07-01', end: '2026-07-31' });
   });
 });
 
