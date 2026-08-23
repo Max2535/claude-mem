@@ -7,6 +7,7 @@ import { SearchManager } from '../../SearchManager.js';
 import type { SearchTelemetryEnvelope } from '../../SearchManager.js';
 import { BaseRouteHandler } from '../BaseRouteHandler.js';
 import { validateBody } from '../middleware/validateBody.js';
+import { rejectCrossOriginSubprocessRoutes } from '../middleware.js';
 import { logger } from '../../../../utils/logger.js';
 import { groupByDate } from '../../../../shared/timeline-formatting.js';
 import { countObservationsByProjects } from '../../../context/ObservationCompiler.js';
@@ -147,7 +148,11 @@ export class SearchRoutes extends BaseRouteHandler {
 
     app.get('/api/search/observations', this.handleSearchObservations.bind(this));
     app.get('/api/search/by-file', this.handleSearchByFile.bind(this));
-    app.get('/api/search/temporal', this.handleTemporalSearch.bind(this));
+    // The only route here that spawns a subprocess per request, so the only one
+    // that needs the cross-origin gate (middleware.ts). It sits in front of the
+    // handler rather than on the whole /api/search prefix: the other search
+    // endpoints are plain SQLite reads and the viewer is not the only caller.
+    app.get('/api/search/temporal', rejectCrossOriginSubprocessRoutes, this.handleTemporalSearch.bind(this));
 
     app.get('/api/context/recent', this.handleGetRecentContext.bind(this));
     app.get('/api/context/preview', this.handleContextPreview.bind(this));
