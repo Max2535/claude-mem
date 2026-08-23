@@ -20,6 +20,7 @@ import {
 import { ResultFormatter } from './search/ResultFormatter.js';
 import { ChromaUnavailableError } from './search/errors.js';
 import { VectorlessSearchStrategy, type VectorlessConfig } from './search/strategies/VectorlessSearchStrategy.js';
+import type { LlmFn } from './search/vectorless/TraversalAgent.js';
 import { createVectorlessLlmRunner, productionVectorlessLlmDeps } from './search/vectorless/llm-runner.js';
 import { SettingsDefaultsManager, type SettingsDefaults } from '../../shared/SettingsDefaultsManager.js';
 import { USER_SETTINGS_PATH } from '../../shared/paths.js';
@@ -73,20 +74,29 @@ export class SearchManager {
   private orchestrator: SearchOrchestrator;
   private vectorlessStrategy: VectorlessSearchStrategy | null;
 
+  /**
+   * `deps` exists for the same reason createVectorlessLlmRunner(deps) does:
+   * everything below the traversal call is ordinary logic, and hardcoding the
+   * runner here put temporalSearch behind a real subprocess. Production passes
+   * nothing and gets the production runner and the user's settings.
+   */
   constructor(
     private sessionSearch: SessionSearch,
     private sessionStore: SessionStore,
     private chromaSync: ChromaSync | null,
     private formatter: FormattingService,
-    private timelineService: TimelineService
+    private timelineService: TimelineService,
+    deps: { vectorlessLlm?: LlmFn; vectorlessConfig?: VectorlessConfig | null } = {}
   ) {
     const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
-    const vectorlessConfig = buildVectorlessConfig(settings);
+    const vectorlessConfig = deps.vectorlessConfig !== undefined
+      ? deps.vectorlessConfig
+      : buildVectorlessConfig(settings);
     // The runner is built here rather than imported as a module singleton so
     // its usage hook can reach this store. Project stays null: the runner is
     // constructed once, while project is a per-query argument — vectorless
     // spend is therefore reported as unattributed rather than misattributed.
-    const vectorlessLlm = createVectorlessLlmRunner({
+    const vectorlessLlm = deps.vectorlessLlm ?? createVectorlessLlmRunner({
       ...productionVectorlessLlmDeps,
       recordUsage: usage => {
         try {
