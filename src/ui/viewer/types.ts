@@ -46,8 +46,39 @@ export type FeedItem =
   | (Summary & { itemType: 'summary' })
   | (UserPrompt & { itemType: 'prompt' });
 
+/**
+ * One step of claude-mem's own pipeline, streamed live for the Agent Flow
+ * screen. Mirrors src/services/worker/events/AgentFlowBuffer.ts by hand — the
+ * viewer builds separately and cannot import worker source.
+ *
+ * Nothing here carries user content: `detail` is a tool name, a provider name,
+ * or a count, never prompt or observation text.
+ */
+export type AgentFlowStage =
+  | 'hook_received'
+  | 'session_started'
+  | 'observation_queued'
+  | 'compression_finished'
+  | 'observation_written'
+  | 'summary_written'
+  | 'context_injected'
+  | 'session_completed';
+
+export interface AgentFlowEvent {
+  /** Monotonic per worker lifetime. The ordering and dedupe key — not `at`. */
+  seq: number;
+  stage: AgentFlowStage;
+  at: number;
+  project: string | null;
+  contentSessionId: string | null;
+  sessionDbId: number | null;
+  detail: string | null;
+  outcome: 'ok' | 'idle' | 'error' | null;
+}
+
 export interface StreamEvent {
-  type: 'initial_load' | 'new_observation' | 'new_summary' | 'new_prompt' | 'processing_status';
+  type: 'initial_load' | 'new_observation' | 'new_summary' | 'new_prompt' | 'processing_status'
+    | 'flow_backlog' | 'flow_event';
   observations?: Observation[];
   summaries?: Summary[];
   prompts?: UserPrompt[];
@@ -57,6 +88,10 @@ export interface StreamEvent {
   prompt?: UserPrompt;
   isProcessing?: boolean;
   queueDepth?: number;
+  /** flow_backlog: the worker's ring replayed on connect, oldest first. */
+  events?: AgentFlowEvent[];
+  /** flow_event: one live step. */
+  event?: AgentFlowEvent;
 }
 
 

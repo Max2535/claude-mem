@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Observation, Summary, UserPrompt, StreamEvent } from '../types';
+import { Observation, Summary, UserPrompt, StreamEvent, AgentFlowEvent } from '../types';
+import { mergeFlowEvents } from '../utils/agentFlow';
 import { API_ENDPOINTS } from '../constants/api';
 import { TIMING } from '../constants/timing';
 
@@ -10,6 +11,9 @@ export function useSSE() {
   const [projects, setProjects] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [queueDepth, setQueueDepth] = useState(0);
+  // Agent Flow rides the existing EventSource. A second connection would double
+  // every broadcast the worker makes and give the backlog replay two consumers.
+  const [flowEvents, setFlowEvents] = useState<AgentFlowEvent[]>([]);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
@@ -79,6 +83,18 @@ export function useSSE() {
             }
             break;
 
+          case 'flow_backlog':
+            if (data.events?.length) {
+              setFlowEvents(prev => mergeFlowEvents(prev, data.events!));
+            }
+            break;
+
+          case 'flow_event':
+            if (data.event) {
+              setFlowEvents(prev => mergeFlowEvents(prev, [data.event!]));
+            }
+            break;
+
           case 'processing_status':
             if (typeof data.isProcessing === 'boolean') {
               console.log('[SSE] Processing status:', data.isProcessing, 'Queue depth:', data.queueDepth);
@@ -108,6 +124,7 @@ export function useSSE() {
     prompts,
     projects,
     isProcessing,
-    queueDepth
+    queueDepth,
+    flowEvents
   };
 }

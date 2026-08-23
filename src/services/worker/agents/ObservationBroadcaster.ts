@@ -23,6 +23,15 @@ export function broadcastObservation(
     type: 'new_observation',
     observation: payload
   });
+  // Title, not text: Agent Flow must stay free of observation bodies.
+  worker.sseBroadcaster.emitFlow?.({
+    stage: 'observation_written',
+    project: payload.project,
+    contentSessionId: payload.session_id,
+    sessionDbId: null,
+    detail: payload.type,
+    outcome: 'ok',
+  });
 }
 
 export function broadcastSummary(
@@ -44,5 +53,13 @@ export function broadcastSummary(
   worker.sseBroadcaster.broadcast({
     type: 'new_summary',
     summary: payload
+  });
+  worker.sseBroadcaster.emitFlow?.({
+    stage: 'summary_written',
+    project: payload.project,
+    contentSessionId: payload.session_id,
+    sessionDbId: null,
+    detail: null,
+    outcome: 'ok',
   });
 }

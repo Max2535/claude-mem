@@ -38,6 +38,7 @@ interface MockRes {
   status: ReturnType<typeof mock>;
   json: ReturnType<typeof mock>;
   headersSent: boolean;
+  locals: Record<string, unknown>;
 }
 
 function createMockRes(): MockRes {
@@ -47,6 +48,9 @@ function createMockRes(): MockRes {
     status: mock(() => res as any),
     json: mock(() => {}),
     headersSent: false,
+    // Express always provides this; handlers stash per-request data on it
+    // (agentFlowDetail, searchTelemetry) and a double without it throws.
+    locals: {},
   };
   return res;
 }

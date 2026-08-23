@@ -97,6 +97,7 @@ import { TranscriptWatcher } from './transcripts/watcher.js';
 import { SyncApply } from './sync/SyncApply.js';
 import { SyncClient } from './sync/SyncClient.js';
 
+import { agentFlowHookRoutes } from './worker/http/middleware/agentFlowHook.js';
 import { ViewerRoutes } from './worker/http/routes/ViewerRoutes.js';
 import { SessionRoutes } from './worker/http/routes/SessionRoutes.js';
 import { DataRoutes } from './worker/http/routes/DataRoutes.js';
@@ -248,7 +249,7 @@ export class WorkerService implements WorkerRef {
 
     this.paginationHelper = new PaginationHelper(this.dbManager);
     this.settingsManager = new SettingsManager(this.dbManager);
-    this.sessionEventBroadcaster = new SessionEventBroadcaster(this.sseBroadcaster, this);
+    this.sessionEventBroadcaster = new SessionEventBroadcaster(this.sseBroadcaster, this, this.sessionManager);
     this.completionHandler = new SessionCompletionHandler(
       this.sessionManager,
       this.sessionEventBroadcaster,
@@ -351,6 +352,9 @@ export class WorkerService implements WorkerRef {
       return;
     });
 
+    // Before every route below: the Agent Flow listener must be attached to
+    // each hook response before its handler can finish it.
+    this.server.registerRoutes(agentFlowHookRoutes(this.sseBroadcaster));
     this.server.registerRoutes(new ViewerRoutes(this.sseBroadcaster, this.dbManager, this.sessionManager));
     const sessionRoutes = new SessionRoutes(this.sessionManager, this.dbManager, this.sdkAgent, this.geminiAgent, this.openRouterAgent, this.sessionEventBroadcaster, this, this.completionHandler);
     this.server.registerRoutes(sessionRoutes);

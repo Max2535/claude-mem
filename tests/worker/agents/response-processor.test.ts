@@ -118,6 +118,7 @@ describe('ResponseProcessor', () => {
   let mockChromaSyncSummary: ReturnType<typeof mock>;
   let mockBroadcast: ReturnType<typeof mock>;
   let mockBroadcastProcessingStatus: ReturnType<typeof mock>;
+  let mockEmitFlow: ReturnType<typeof mock>;
   let mockDbManager: DatabaseManager;
   let mockSessionManager: SessionManager;
   let mockWorker: WorkerRef;
@@ -173,10 +174,12 @@ describe('ResponseProcessor', () => {
 
     mockBroadcast = mock(() => {});
     mockBroadcastProcessingStatus = mock(() => {});
+    mockEmitFlow = mock(() => {});
 
     mockWorker = {
       sseBroadcaster: {
         broadcast: mockBroadcast,
+        emitFlow: mockEmitFlow,
       },
       broadcastProcessingStatus: mockBroadcastProcessingStatus,
     };
@@ -1020,6 +1023,100 @@ describe('ResponseProcessor', () => {
       await processAgentResponse(responseText, session, mockDbManager, mockSessionManager, mockWorker, 0, null, 'TestAgent');
 
       expect(session.lastSummaryStored).toBe(false);
+    });
+  });
+
+  /**
+   * processAgentResponse is the one place every provider's raw text converges, so
+   * it is also the only place Agent Flow can mark the end of an observer round
+   * once for Claude, Gemini and OpenRouter alike. These lock every exit path —
+   * the silent ones especially, since an un-emitted branch shows up in the UI as
+   * a round that started and never finished.
+   */
+  describe('processAgentResponse — agent flow', () => {
+    function flowEvents(): Array<Record<string, unknown>> {
+      return mockEmitFlow.mock.calls.map(call => call[0] as Record<string, unknown>);
+    }
+
+    it('marks a stored round as ok and reports the observation count', async () => {
+      const session = createMockSession();
+      const responseText = `<observation>
+    <type>discovery</type>
+    <title>Found it</title>
+    <narrative>Something happened.</narrative>
+  </observation>`;
+
+      await processAgentResponse(
+        responseText,
+        session,
+        mockDbManager,
+        mockSessionManager,
+        mockWorker,
+        100,
+        null,
+        'TestAgent'
+      );
+
+      const finished = flowEvents().filter(e => e.stage === 'compression_finished');
+      expect(finished).toHaveLength(1);
+      expect(finished[0].outcome).toBe('ok');
+      expect(String(finished[0].detail)).toContain('TestAgent');
+      expect(finished[0].project).toBe('test-project');
+    });
+
+    it('marks a non-XML response as idle rather than leaving the round open', async () => {
+      const session = createMockSession();
+
+      await processAgentResponse(
+        'Nothing worth remembering here.',
+        session,
+        mockDbManager,
+        mockSessionManager,
+        mockWorker,
+        100,
+        null,
+        'TestAgent'
+      );
+
+      const finished = flowEvents().filter(e => e.stage === 'compression_finished');
+      expect(finished).toHaveLength(1);
+      expect(finished[0].outcome).toBe('idle');
+    });
+
+    it('never puts the model output into the event', async () => {
+      const session = createMockSession();
+      const secret = 'SECRET_MODEL_PROSE_DO_NOT_LEAK';
+
+      await processAgentResponse(
+        secret,
+        session,
+        mockDbManager,
+        mockSessionManager,
+        mockWorker,
+        100,
+        null,
+        'TestAgent'
+      );
+
+      expect(JSON.stringify(flowEvents())).not.toContain(secret);
+    });
+
+    it('works against a worker double with no Agent Flow support', async () => {
+      const session = createMockSession();
+      const legacyWorker = { sseBroadcaster: { broadcast: mockBroadcast } };
+
+      await processAgentResponse(
+        'plain prose',
+        session,
+        mockDbManager,
+        mockSessionManager,
+        legacyWorker as typeof mockWorker,
+        100,
+        null,
+        'TestAgent'
+      );
+
+      expect(mockEmitFlow).not.toHaveBeenCalled();
     });
   });
 });

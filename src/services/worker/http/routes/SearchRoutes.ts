@@ -380,6 +380,11 @@ export class SearchRoutes extends BaseRouteHandler {
       });
     }
 
+    // Size only — the injected text itself never reaches Agent Flow. Read by
+    // the agentFlowHook middleware on response finish.
+    (res.locals as { agentFlowDetail?: string }).agentFlowDetail =
+      `context \u00b7 ${contextResult.text.length} chars`;
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(contextResult.text);
   });

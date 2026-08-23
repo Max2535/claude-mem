@@ -12,6 +12,7 @@ import { ContextSettingsModal } from './components/ContextSettingsModal';
 import { LogsDrawer } from './components/LogsModal';
 import { WelcomeCard, getStoredWelcomeDismissed, setStoredWelcomeDismissed } from './components/WelcomeCard';
 import { useSSE } from './hooks/useSSE';
+import { AgentFlow } from './components/AgentFlow';
 import { useSettings } from './hooks/useSettings';
 import { usePagination } from './hooks/usePagination';
 import { useTheme } from './hooks/useTheme';
@@ -34,7 +35,7 @@ export function App() {
   // an answer that cost an LLM subprocess should not vanish with it.
   const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
 
-  const { observations, summaries, prompts, projects, isProcessing, queueDepth } = useSSE();
+  const { observations, summaries, prompts, projects, isProcessing, queueDepth, flowEvents } = useSSE();
   const { settings, saveSettings, isSaving, saveStatus } = useSettings();
   const { preference, setThemePreference } = useTheme();
   const pagination = usePagination(currentFilter);
@@ -168,6 +169,15 @@ export function App() {
           )}
 
           {route === 'burn' && <TokenBurn currentFilter={currentFilter} />}
+
+          {route === 'flow' && (
+            <AgentFlow
+              flowEvents={flowEvents}
+              currentFilter={currentFilter}
+              isProcessing={isProcessing}
+              queueDepth={queueDepth}
+            />
+          )}
       {route === 'chat' && (
             <Chat
               currentFilter={currentFilter}

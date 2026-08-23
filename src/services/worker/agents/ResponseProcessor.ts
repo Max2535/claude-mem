@@ -274,6 +274,31 @@ export function snapshotResponseContext(session: ActiveSession): ResponseContext
   };
 }
 
+/**
+ * Mark the end of one observer round on the Agent Flow stream.
+ *
+ * This is the single place every provider converges on — Claude, Gemini and
+ * OpenRouter all funnel their raw text through processAgentResponse — so one
+ * emit here covers all three instead of three near-identical emits inside the
+ * provider loops. `detail` carries the provider name and a count, never the
+ * model's output.
+ */
+function emitCompressionFinished(
+  worker: WorkerRef | undefined,
+  session: ActiveSession,
+  outcome: 'ok' | 'idle' | 'error',
+  detail: string
+): void {
+  worker?.sseBroadcaster?.emitFlow?.({
+    stage: 'compression_finished',
+    project: session.project ?? null,
+    contentSessionId: session.contentSessionId ?? null,
+    sessionDbId: session.sessionDbId ?? null,
+    detail,
+    outcome,
+  });
+}
+
 export async function processAgentResponse(
   text: string,
   session: ActiveSession,
@@ -322,6 +347,7 @@ export async function processAgentResponse(
         // best-effort; AbortController.abort() should not throw in normal use.
       }
       worker?.broadcastProcessingStatus?.();
+      emitCompressionFinished(worker, session, 'error', `${agentName} quota limit`);
       return;
     }
 
@@ -342,6 +368,7 @@ export async function processAgentResponse(
         remediation: '/login',
         preview: previewOutput(text),
       });
+      emitCompressionFinished(worker, session, 'error', `${agentName} auth failure`);
       return;
     }
 
@@ -363,6 +390,7 @@ export async function processAgentResponse(
     // creates an observer loop where the same low-signal batch is retried.
     await sessionManager.confirmClaimedMessages(session.sessionDbId);
     session.earliestPendingTimestamp = null;
+    emitCompressionFinished(worker, session, 'idle', `${agentName} ${outputClass}`);
     return;
   }
 
@@ -378,6 +406,7 @@ export async function processAgentResponse(
     // count as "in progress" and trigger a respawn loop while we wait for the
     // memory session id to appear. The next generator pass will re-claim them.
     await sessionManager.resetProcessingToPending(session.sessionDbId);
+    emitCompressionFinished(worker, session, 'idle', `${agentName} deferred`);
     return;
   }
 
@@ -422,6 +451,13 @@ export async function processAgentResponse(
     sessionId: session.sessionDbId,
     memorySessionId: session.memorySessionId
   });
+
+  emitCompressionFinished(
+    worker,
+    session,
+    'ok',
+    `${agentName} \u00b7 ${result.observationIds.length} observation${result.observationIds.length === 1 ? '' : 's'}`
+  );
 
   session.lastSummaryStored = result.summaryId !== null;
 

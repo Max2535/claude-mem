@@ -85,6 +85,15 @@
       --color-chart-burn-plugin-fill: rgba(184, 87, 31, 0.16);
       --color-chart-burn-user-fill: rgba(31, 122, 90, 0.16);
 
+      /* Agent Flow node borders. Distinct from the chart-burn and
+         observation/summary/prompt hues, which already carry other meanings
+         across the viewer — a flow node must not read as a token series. */
+      --color-flow-node-model: #3f6ed4;
+      --color-flow-node-tool: #2f8f5b;
+      --color-flow-node-output: #b6b0a4;
+      --color-flow-node-marker: #cfc9bd;
+      --color-flow-connector: #b3aca0;
+
       /* Explorer tree: the time-block tier, the one node colour the chart
          palette does not already cover. */
       --color-tree-block-fill: #d9f0e2;
@@ -157,6 +166,12 @@
       --color-chart-burn-user: #3fae86;
       --color-chart-burn-plugin-fill: rgba(224, 140, 74, 0.20);
       --color-chart-burn-user-fill: rgba(63, 174, 134, 0.20);
+
+      --color-flow-node-model: #5b8cf0;
+      --color-flow-node-tool: #4cb37c;
+      --color-flow-node-output: #55504a;
+      --color-flow-node-marker: #45413c;
+      --color-flow-connector: #56514a;
 
       --color-tree-block-fill: #1d3327;
       --color-tree-block-stroke: #4a9e72;
@@ -308,6 +323,12 @@
       --color-chart-burn-user: #3fae86;
       --color-chart-burn-plugin-fill: rgba(224, 140, 74, 0.20);
       --color-chart-burn-user-fill: rgba(63, 174, 134, 0.20);
+
+      --color-flow-node-model: #5b8cf0;
+      --color-flow-node-tool: #4cb37c;
+      --color-flow-node-output: #55504a;
+      --color-flow-node-marker: #45413c;
+      --color-flow-connector: #56514a;
 
       --color-tree-block-fill: #1d3327;
       --color-tree-block-stroke: #4a9e72;
@@ -2878,6 +2899,196 @@
       font-size: 12px;
       line-height: 1.8;
       color: var(--color-text-tertiary);
+    }
+
+    /* ==================================================================
+       Agent Flow — the live pipeline monitor
+
+       Reuses the existing accent tokens rather than defining a burn-style
+       palette of its own: the stage name is spelled out in every row, so colour
+       is decoration here and never the thing that carries identity.
+       ================================================================== */
+    .flow-crumbs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+    }
+
+    .flow-crumb-sep { opacity: 0.55; }
+
+    .flow-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    .flow-pip {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-text-tertiary);
+      flex: none;
+    }
+
+    .flow-pip.is-busy { background: var(--color-accent-success); }
+    .flow-pip.is-idle { background: var(--color-text-tertiary); }
+
+    .flow-status-text { flex: 1; }
+
+    .flow-filter {
+      position: relative;
+      margin-bottom: 14px;
+    }
+
+    .flow-filter-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 36px 8px 12px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--color-text-primary);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border-primary);
+      border-radius: 6px;
+    }
+
+    .flow-filter-input:focus {
+      outline: none;
+      border-color: var(--color-border-focus);
+    }
+
+    .flow-filter-icon {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      fill: var(--color-text-tertiary);
+      pointer-events: none;
+    }
+
+    /* ------------------------------------------------------------------
+       The chart itself: one column of nodes, top-to-bottom through time.
+
+       Nodes are HTML rather than SVG <text>. Tool names and provider strings
+       are arbitrary length, and ellipsis truncation in SVG means guessing a
+       character count against a proportional font — which clips or overflows
+       depending on the string. Only the connectors are SVG.
+       ------------------------------------------------------------------ */
+    .flow-chart {
+      max-height: 62vh;
+      overflow-y: auto;
+      /* Nodes never exceed the column width, so nothing scrolls sideways. */
+      overflow-x: hidden;
+      padding: 18px 12px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-secondary);
+    }
+
+    .flow-chart-column {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      /* Centres the column of left-aligned nodes without centring their text. */
+      width: min(560px, 100%);
+      margin: 0 auto;
+    }
+
+    .flow-connector { display: block; margin-left: 12px; flex: none; }
+
+    .flow-connector-line {
+      fill: none;
+      stroke: var(--color-flow-connector);
+      stroke-width: 1.5;
+    }
+
+    .flow-connector-head {
+      fill: none;
+      stroke: var(--color-flow-connector);
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+    }
+
+    .flow-node {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 12px;
+      border: 1px solid var(--color-flow-node-marker);
+      border-radius: 6px;
+      background: var(--color-bg-primary);
+    }
+
+    .flow-node.is-model { border-color: var(--color-flow-node-model); }
+    .flow-node.is-tool { border-color: var(--color-flow-node-tool); }
+    .flow-node.is-output { border-color: var(--color-flow-node-output); }
+
+    /* Failure wins over kind — but the outcome word is still printed, so the
+       colour is never the only thing saying so. */
+    .flow-node.is-error { border-color: var(--color-accent-error); }
+
+    .flow-node-head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .flow-node-glyph {
+      color: var(--color-flow-node-tool);
+      font-size: 12px;
+      flex: none;
+    }
+
+    .flow-node-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .flow-node-time {
+      flex: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      color: var(--color-text-tertiary);
+    }
+
+    .flow-node-subtitle {
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    /* The produced text is what you came to read, so it gets the larger type
+       and is allowed to wrap rather than truncate. */
+    .flow-node.is-output .flow-node-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-text-tertiary);
+    }
+
+    .flow-node.is-output .flow-node-subtitle {
+      font-size: 13px;
+      color: var(--color-text-primary);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 720px) {
+      .flow-chart { padding: 14px 8px; }
+      .flow-node-time { display: none; }
     }
 
     /* ==================================================================
