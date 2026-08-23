@@ -123,12 +123,20 @@ export class SearchManager {
     );
   }
 
+  /**
+   * The body a caller gets when vectorless retrieval is switched off. The route
+   * answers it with 409 rather than 200: a walk that could not run is not a
+   * success, and a client that has to inspect the body to find that out cannot
+   * trust response.ok for anything.
+   */
+  static readonly VECTORLESS_DISABLED_RESPONSE = {
+    error: 'Vectorless retrieval is disabled',
+    hint: 'Set CLAUDE_MEM_VECTORLESS_ENABLED=true in ~/.claude-mem/settings.json and restart the worker',
+  } as const;
+
   async temporalSearch(args: any): Promise<any> {
     if (!this.vectorlessStrategy) {
-      return {
-        error: 'Vectorless retrieval is disabled',
-        hint: 'Set CLAUDE_MEM_VECTORLESS_ENABLED=true in ~/.claude-mem/settings.json and restart the worker',
-      };
+      return { ...SearchManager.VECTORLESS_DISABLED_RESPONSE };
     }
     const dateRange = (args.dateStart || args.dateEnd)
       ? { start: args.dateStart, end: args.dateEnd }

@@ -31,11 +31,11 @@ const WALK_STRATEGY = 'vectorless';
 
 /**
  * Either the walk answered, or we fall through to keyword search carrying a
- * note that says why. The disabled case arrives as HTTP 200 with an `error`
- * field, so status alone cannot decide this — and neither can the absence of an
- * error, because the orchestrator answers a failed walk with plain SQLite
- * results (SearchOrchestrator.ts:66) under HTTP 200 and no error at all. Only
- * the strategy the server names can tell those apart.
+ * note that says why. The disabled case is an HTTP 409 carrying the server's
+ * own words, so status decides it. A non-OK status alone is not the whole
+ * story though: the orchestrator answers a FAILED walk with plain SQLite
+ * results (SearchOrchestrator.ts:66) under HTTP 200 and no error at all, so
+ * only the strategy the server names separates that from a walk.
  */
 export type WalkOutcome =
   | { kind: 'walk'; observations: SearchObservation[]; traversal?: MemoryWalkTraversal; coverage?: MemoryWalkCoverage }
@@ -43,11 +43,13 @@ export type WalkOutcome =
 
 export function readWalkResponse(ok: boolean, status: number, body: MemoryWalkResponse | null): WalkOutcome {
   if (!ok) {
-    return { kind: 'fallback', note: `The retrieval walk answered with HTTP ${status}.` };
-  }
-  if (!body || body.error) {
+    // 409 carries the server's own explanation (vectorless switched off); other
+    // statuses carry nothing useful, so name the status instead.
     const note = [body?.error, body?.hint].filter(Boolean).join(' — ');
-    return { kind: 'fallback', note: note || undefined };
+    return { kind: 'fallback', note: note || `The retrieval walk answered with HTTP ${status}.` };
+  }
+  if (!body) {
+    return { kind: 'fallback', note: undefined };
   }
   if (body.strategy !== WALK_STRATEGY) {
     // Understate rather than overstate: a turn that says it walked the index

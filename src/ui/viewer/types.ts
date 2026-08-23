@@ -198,9 +198,10 @@ export interface MemoryWalkCoverage {
 }
 
 /**
- * Shape of GET /api/search/temporal. Note the 200-with-`error` case: when
- * vectorless retrieval is switched off the endpoint still answers 200, so
- * `response.ok` alone never proves a walk happened.
+ * Shape of GET /api/search/temporal. With vectorless retrieval switched off the
+ * endpoint answers 409 carrying `error` and `hint`, so `response.ok` is the
+ * honest test for "the walk ran at all"; `strategy` is what separates a walk
+ * from a walk that failed and fell back to SQLite under 200.
  */
 export interface MemoryWalkResponse {
   observations?: SearchObservation[];

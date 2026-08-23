@@ -9,9 +9,10 @@ import {
 import type { MemoryWalkTraversal } from '../../src/ui/viewer/types.js';
 
 describe('readWalkResponse', () => {
-  it('treats a 200 carrying an error as a fallback, not a walk', () => {
-    // The disabled endpoint answers 200 — response.ok alone would call this success.
-    const outcome = readWalkResponse(true, 200, {
+  it('reads the disabled 409 and repeats what the server said', () => {
+    // The disabled endpoint answers 409; the note still comes from the body,
+    // not from a paraphrase this screen invented.
+    const outcome = readWalkResponse(false, 409, {
       error: 'Vectorless retrieval is disabled',
       hint: 'Set CLAUDE_MEM_VECTORLESS_ENABLED=true in ~/.claude-mem/settings.json and restart the worker',
     });
@@ -21,7 +22,7 @@ describe('readWalkResponse', () => {
     expect(outcome.note).toContain('CLAUDE_MEM_VECTORLESS_ENABLED=true');
   });
 
-  it('falls back with the status when the request itself failed', () => {
+  it('falls back with the status when the failure carried no explanation', () => {
     const outcome = readWalkResponse(false, 500, null);
     expect(outcome.kind).toBe('fallback');
     if (outcome.kind !== 'fallback') return;

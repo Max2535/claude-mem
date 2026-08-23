@@ -181,7 +181,12 @@ export class SearchRoutes extends BaseRouteHandler {
 
   private handleTemporalSearch = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
     const result = await this.searchManager.temporalSearch(this.queryWithPlatformSource(req));
-    res.json(result);
+    // 409, not 200: the endpoint exists but the walk cannot run in this
+    // configuration. The body is unchanged — only the status stops lying, so a
+    // client can trust response.ok instead of parsing an error field out of a
+    // success. A walk that RAN and fell back still answers 200; the client
+    // tells those apart by the strategy the server names.
+    res.status(result?.error ? 409 : 200).json(result);
   });
 
   private handleSearchByFile = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {

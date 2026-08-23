@@ -103,10 +103,12 @@ test('a one-round walk says the day pass was skipped instead of faking it', asyn
 });
 
 test('with vectorless off it falls back to keyword search and says so verbatim', async ({ page }) => {
+  // 409, not 200: the walk could not run, and the status says so before the
+  // body is even read.
   await stubJson(page, WALK_ROUTE, {
     error: 'Vectorless retrieval is disabled',
     hint: 'Set CLAUDE_MEM_VECTORLESS_ENABLED=true in ~/.claude-mem/settings.json and restart the worker',
-  });
+  }, 409);
   await stubJson(page, KEYWORD_ROUTE, {
     observations: [observation(7, 'Added the Playwright harness')],
     sessions: [{}, {}],
@@ -199,13 +201,15 @@ test('the live endpoint still answers in one of the two shapes the screen knows'
   // No stub: this is the contract check. It asserts the shape, never the
   // content, because the walk is an LLM and the database keeps growing.
   const response = await page.request.get('/api/search/temporal?query=explorer&limit=1');
-  expect(response.ok()).toBeTruthy();
   const body = await response.json() as Record<string, unknown>;
 
-  if (body.error) {
+  // Vectorless off is a 409 carrying the explanation; a walk that ran is a 200.
+  if (response.status() === 409) {
+    expect(body.error).toBe('Vectorless retrieval is disabled');
     expect(typeof body.hint).toBe('string');
     return;
   }
+  expect(response.ok()).toBeTruthy();
   expect(Array.isArray(body.observations)).toBeTruthy();
   expect(body.traversal).toMatchObject({
     rounds: expect.any(Number),
