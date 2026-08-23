@@ -70,10 +70,17 @@ function errorIfWorkerScriptMissing(): void {
   );
 }
 
+type McpToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
+type CallWorkerOptions = { query?: Record<string, any>; body?: Record<string, any>; text?: boolean; raw?: boolean };
+
+// `raw` endpoints answer with their own JSON instead of an MCP envelope, so the
+// caller has to wrap them; every other route already answers in MCP shape.
+async function callWorker(endpoint: string, opts: CallWorkerOptions & { raw: true }): Promise<McpToolResult | Record<string, any>>;
+async function callWorker(endpoint: string, opts?: CallWorkerOptions): Promise<McpToolResult>;
 async function callWorker(
   endpoint: string,
-  opts: { query?: Record<string, any>; body?: Record<string, any>; text?: boolean } = {}
-): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+  opts: CallWorkerOptions = {}
+): Promise<McpToolResult | Record<string, any>> {
   logger.debug('SYSTEM', '→ Worker API', undefined, { endpoint });
 
   try {
@@ -107,7 +114,12 @@ async function callWorker(
     if (opts.body) {
       return { content: [{ type: 'text' as const, text: JSON.stringify(await response.json(), null, 2) }] };
     }
-    return await response.json() as { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
+    const parsed = await response.json();
+    // `raw` says the endpoint answers with its own JSON rather than an MCP
+    // envelope; the caller wraps it. Every other GET route already answers in
+    // MCP shape, so the cast stays the default.
+    if (opts.raw) return parsed as Record<string, any>;
+    return parsed as { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
   } catch (error: unknown) {
     logger.error('SYSTEM', '← Worker API error', { endpoint }, error instanceof Error ? error : new Error(String(error)));
     return {
@@ -436,7 +448,13 @@ async function ensureWorkerConnection(): Promise<boolean> {
   }
 }
 
-const tools = [
+/**
+ * The MCP tool registry. Exported so an integration test can invoke a handler
+ * the way the CallTool dispatcher does, without a stdio transport in front of
+ * it — the tools are the surface an agent actually uses, and until now only
+ * their schemas were ever checked.
+ */
+export const tools = [
   {
     name: 'important_workflow',
     description: `3-LAYER WORKFLOW (ALWAYS FOLLOW):
@@ -557,7 +575,13 @@ NEVER fetch full details without filtering first. 10x token savings.`,
       additionalProperties: true
     },
     handler: async (args: any) => {
-      return await callWorker('/api/search/temporal', { query: args });
+      // Unlike /api/search, the temporal endpoint answers with plain search
+      // JSON rather than an MCP content envelope — callWorker's GET path hands
+      // that straight back, so the tool used to return a result with no
+      // `content` array at all. Wrap it here, where the shape is owed.
+      const response = await callWorker('/api/search/temporal', { query: args, raw: true });
+      if ('content' in response) return response;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }] };
     }
   },
   {
@@ -1045,7 +1069,20 @@ async function main() {
   }, 0);
 }
 
-main().catch((error) => {
-  logger.error('SYSTEM', 'Fatal error', undefined, error);
-  process.exit(0);
-});
+// Same entry guard as worker-service.ts: importing this module must not
+// connect a stdio transport, start the heartbeat, or auto-spawn a worker.
+// Tests invoke the exported tool handlers directly.
+const isMainModule = typeof require !== 'undefined' && typeof module !== 'undefined'
+  ? require.main === module || !module.parent
+  : Boolean(process.argv[1]) && (
+      process.argv[1].endsWith('mcp-server.ts')
+      || process.argv[1].endsWith('mcp-server.js')
+      || process.argv[1].endsWith('mcp-server.cjs')
+    );
+
+if (isMainModule) {
+  main().catch((error) => {
+    logger.error('SYSTEM', 'Fatal error', undefined, error);
+    process.exit(0);
+  });
+}
