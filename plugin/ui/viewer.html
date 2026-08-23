@@ -80,6 +80,10 @@
       --color-chart-summary: #9a6700;
       --color-chart-prompt: #8250df;
       --color-chart-grid: #e4e0d8;
+      --color-chart-burn-plugin: #b8571f;
+      --color-chart-burn-user: #1f7a5a;
+      --color-chart-burn-plugin-fill: rgba(184, 87, 31, 0.16);
+      --color-chart-burn-user-fill: rgba(31, 122, 90, 0.16);
 
       /* Explorer tree: the time-block tier, the one node colour the chart
          palette does not already cover. */
@@ -149,6 +153,10 @@
       --color-chart-summary: #ba8400;
       --color-chart-prompt: #a278d1;
       --color-chart-grid: #3a3630;
+      --color-chart-burn-plugin: #e08c4a;
+      --color-chart-burn-user: #3fae86;
+      --color-chart-burn-plugin-fill: rgba(224, 140, 74, 0.20);
+      --color-chart-burn-user-fill: rgba(63, 174, 134, 0.20);
 
       --color-tree-block-fill: #1d3327;
       --color-tree-block-stroke: #4a9e72;
@@ -296,6 +304,10 @@
       --color-chart-summary: #ba8400;
       --color-chart-prompt: #a278d1;
       --color-chart-grid: #3a3630;
+      --color-chart-burn-plugin: #e08c4a;
+      --color-chart-burn-user: #3fae86;
+      --color-chart-burn-plugin-fill: rgba(224, 140, 74, 0.20);
+      --color-chart-burn-user-fill: rgba(63, 174, 134, 0.20);
 
       --color-tree-block-fill: #1d3327;
       --color-tree-block-stroke: #4a9e72;
@@ -2773,6 +2785,99 @@
       margin-top: 4px;
       font-size: 11px;
       color: var(--color-text-secondary);
+    }
+
+    /* ==================================================================
+       Token Burn
+       ================================================================== */
+
+    /* Two control groups on one row: a second .chart-head reads as a layout bug. */
+    .chart-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .burn-series-line {
+      fill: none;
+      stroke-width: 2;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+
+    .burn-series-line.is-plugin { stroke: var(--color-chart-burn-plugin); }
+    .burn-series-line.is-user { stroke: var(--color-chart-burn-user); }
+
+    .burn-series-area { stroke: none; }
+    .burn-series-area.is-plugin { fill: var(--color-chart-burn-plugin-fill); }
+    .burn-series-area.is-user { fill: var(--color-chart-burn-user-fill); }
+
+    /* Direct labels: identity must not rest on hue alone. */
+    .burn-label {
+      font-size: 11px;
+      font-weight: 600;
+      dominant-baseline: middle;
+    }
+
+    .burn-label.is-plugin { fill: var(--color-chart-burn-plugin); }
+    .burn-label.is-user { fill: var(--color-chart-burn-user); }
+
+    .burn-cursor {
+      stroke: var(--color-border-hover);
+      stroke-width: 1;
+      stroke-dasharray: 3 3;
+    }
+
+    .burn-tooltip {
+      position: absolute;
+      pointer-events: none;
+      min-width: 168px;
+      padding: 8px 10px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 6px;
+      background: var(--color-bg-card);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+      font-size: 12px;
+      color: var(--color-text-primary);
+      z-index: 4;
+    }
+
+    .burn-tooltip-day {
+      margin-bottom: 6px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+    }
+
+    .burn-tooltip-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.7;
+    }
+
+    .burn-tooltip-row strong {
+      margin-left: auto;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .burn-swatch {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+
+    .burn-swatch.is-plugin { background: var(--color-chart-burn-plugin); }
+    .burn-swatch.is-user { background: var(--color-chart-burn-user); }
+
+    .burn-note {
+      margin: 16px 0 0;
+      padding: 0 0 0 18px;
+      list-style: disc;
+      font-size: 12px;
+      line-height: 1.8;
+      color: var(--color-text-tertiary);
     }
 
     /* ==================================================================
