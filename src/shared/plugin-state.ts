@@ -5,7 +5,14 @@ import { homedir } from 'os';
 import { logger } from '../utils/logger.js';
 import { parseJsonWithBom } from './atomic-json.js';
 
-const PLUGIN_SETTINGS_KEY = 'claude-mem@thedotmack';
+/**
+ * The `<plugin>@<marketplace>` id Claude Code keys this plugin by, in both
+ * `settings.json → enabledPlugins` and `plugins/installed_plugins.json`.
+ * Exported because it is the only reliable "is the loader actually going to
+ * fire our hooks?" signal: a marketplace directory on disk is not, as a stale
+ * rsync copy of one satisfies that test while the loader ignores it.
+ */
+export const PLUGIN_SETTINGS_KEY = 'claude-mem-pro-max@max2535';
 
 export function isPluginDisabledInClaudeSettings(): boolean {
   try {

@@ -8,6 +8,7 @@ const projectRoot = path.resolve(__dirname, '../..');
 
 describe('Version Consistency', () => {
   let rootVersion: string;
+  let rootPackageName: string;
 
   it('should read version from root package.json', () => {
     const packageJsonPath = path.join(projectRoot, 'package.json');
@@ -18,6 +19,7 @@ describe('Version Consistency', () => {
     expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+$/);
     
     rootVersion = packageJson.version;
+    rootPackageName = packageJson.name;
   });
 
   it('should have matching version in plugin/package.json', () => {
@@ -44,9 +46,13 @@ describe('Version Consistency', () => {
     expect(marketplaceJson.plugins).toBeDefined();
     expect(marketplaceJson.plugins.length).toBeGreaterThan(0);
     
-    const claudeMemPlugin = marketplaceJson.plugins.find((p: any) => p.name === 'claude-mem');
-    expect(claudeMemPlugin).toBeDefined();
-    expect(claudeMemPlugin.version).toBe(rootVersion);
+    // Look the entry up by package.json's name rather than a literal: the
+    // plugin name is generated from it (scripts/sync-plugin-manifests.js), so a
+    // literal here silently stops matching the moment the plugin is renamed and
+    // the marketplace entry it was meant to guard goes unchecked.
+    const pluginEntry = marketplaceJson.plugins.find((p: any) => p.name === rootPackageName);
+    expect(pluginEntry).toBeDefined();
+    expect(pluginEntry.version).toBe(rootVersion);
   });
 
   it('should have version injected into built worker-service.cjs', () => {
