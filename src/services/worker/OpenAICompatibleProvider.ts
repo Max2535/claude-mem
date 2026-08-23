@@ -9,6 +9,8 @@ import { ModeManager } from '../domain/ModeManager.js';
 import type { ModeConfig } from '../domain/types.js';
 import { resolveSummaryTierModel } from './model-aliases.js';
 import { isClassified } from './provider-errors.js';
+import { recordPluginTokenUsage } from './token-usage/plugin-usage.js';
+import { randomUUID } from 'crypto';
 import {
   processAgentResponse,
   snapshotResponseContext,
@@ -76,6 +78,28 @@ export abstract class OpenAICompatibleProvider<TConfig extends { apiKey: string;
 
   /** Build the session.lastUsage value from a query result. */
   protected abstract buildLastUsage(result: ProviderQueryResult): ActiveSession['lastUsage'];
+
+  /**
+   * Persists this call's spend to token_usage_events so the Token Burn screen
+   * shows a real plugin series on a Gemini or OpenRouter install rather than a
+   * flat zero, which would read as a broken chart rather than an unsupported
+   * provider.
+   *
+   * Gated on buildLastUsage returning a value: same both-sides-or-nothing rule
+   * as the telemetry event. These are plain HTTP calls with no re-delivery, so
+   * a fresh uuid is a sound idempotency key — unlike the transcript path,
+   * there is nothing here to deduplicate against.
+   */
+  private recordTokenUsage(session: ActiveSession, result: ProviderQueryResult, model: string): void {
+    const usage = this.buildLastUsage(result);
+    if (!usage) return;
+    recordPluginTokenUsage(this.dbManager, session, 'observer', `plugin:${this.providerName}:${randomUUID()}`, {
+      model,
+      inputTokens: usage.input,
+      outputTokens: usage.output,
+      costUsd: usage.costUsd ?? null,
+    });
+  }
 
   /** Hook for per-session setup that runs once config is resolved (e.g. endpointClass). */
   protected prepareSessionExtras(_session: ActiveSession, _config: TConfig): void {}
@@ -182,6 +206,7 @@ export abstract class OpenAICompatibleProvider<TConfig extends { apiKey: string;
       session.cumulativeInputTokens += Math.floor(tokensUsed * 0.7);
       session.cumulativeOutputTokens += Math.floor(tokensUsed * 0.3);
       session.lastUsage = this.buildLastUsage(initResponse);
+      this.recordTokenUsage(session, initResponse, initResponse.servedModel ?? model);
       await processAgentResponse(
         initResponse.content, session, this.dbManager, this.sessionManager,
         worker, tokensUsed, null, this.providerName, undefined, initResponse.servedModel ?? model, responseContext
@@ -233,6 +258,7 @@ export abstract class OpenAICompatibleProvider<TConfig extends { apiKey: string;
       // Both sides or nothing: a backend reporting only one of the two counts
       // must not produce a half-real event (input=0 → compression_ratio 0.0).
       session.lastUsage = this.buildLastUsage(obsResponse);
+      this.recordTokenUsage(session, obsResponse, obsResponse.servedModel ?? config.model);
     }
 
     if (obsResponse.content || this.forwardEmptyMessageResponse) {
@@ -289,6 +315,7 @@ export abstract class OpenAICompatibleProvider<TConfig extends { apiKey: string;
       session.cumulativeInputTokens += Math.floor(tokensUsed * 0.7);
       session.cumulativeOutputTokens += Math.floor(tokensUsed * 0.3);
       session.lastUsage = this.buildLastUsage(summaryResponse);
+      this.recordTokenUsage(session, summaryResponse, summaryResponse.servedModel ?? summaryConfig.model);
     }
 
     if (summaryResponse.content || this.forwardEmptyMessageResponse) {

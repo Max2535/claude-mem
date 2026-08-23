@@ -58,6 +58,7 @@ export interface SettingsDefaults {
   CLAUDE_MEM_TRANSCRIPTS_CONFIG_PATH: string;  
   CLAUDE_MEM_CODEX_TRANSCRIPT_INGESTION: string;
   CLAUDE_MEM_MAX_CONCURRENT_AGENTS: string;
+  CLAUDE_MEM_TOKEN_BURN_CAPTURE: string;
   CLAUDE_MEM_VECTORLESS_ENABLED: string;
   CLAUDE_MEM_VECTORLESS_MAX_INDEX_ROWS: string;
   CLAUDE_MEM_VECTORLESS_MAX_DAYS: string;
@@ -156,6 +157,7 @@ export class SettingsDefaultsManager {
     CLAUDE_MEM_TRANSCRIPTS_CONFIG_PATH: join(homedir(), '.claude-mem', 'transcript-watch.json'),
     CLAUDE_MEM_CODEX_TRANSCRIPT_INGESTION: 'false',
     CLAUDE_MEM_MAX_CONCURRENT_AGENTS: '2',  // Max concurrent Claude SDK agent subprocesses
+    CLAUDE_MEM_TOKEN_BURN_CAPTURE: 'true',  // Read per-turn token counts (never message text) out of the Claude Code transcript for the Token Burn screen
     CLAUDE_MEM_VECTORLESS_ENABLED: 'false',  // LLM-guided index-walk retrieval; adds 1-2 SDK calls per query when on
     CLAUDE_MEM_VECTORLESS_MAX_INDEX_ROWS: '500',  // Cap on observations loaded into the walked index per query
     CLAUDE_MEM_VECTORLESS_MAX_DAYS: '14',  // Day-selection round triggers only above this many distinct days

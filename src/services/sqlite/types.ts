@@ -102,3 +102,51 @@ export interface UserPromptSearchResult extends UserPromptRow {
   rank?: number; 
   score?: number; 
 }
+
+/**
+ * One billing-relevant model call, durable. Written by two independent
+ * capture paths (see token_usage_events in SessionStore) and read only in
+ * aggregate by the Token Burn screen.
+ *
+ * The four token buckets stay separate all the way to the query: cache reads
+ * bill at roughly a tenth of input and dominate the raw sum, so a single
+ * total_tokens column would make the plugin's own spend look ~10x worse than
+ * it is. Derivation belongs in the SELECT, not in the writer.
+ */
+export interface TokenUsageEvent {
+  /**
+   * Idempotency key. For transcript rows this MUST be the assistant
+   * message.id: Claude Code writes one API response across up to five JSONL
+   * lines that share message.id and usage but each carry a distinct uuid, so
+   * keying on uuid over-counts by ~1.65x on a real transcript. The UNIQUE
+   * index is the mechanism that makes re-reads safe, not a safety net.
+   */
+  eventKey: string;
+  /** 'plugin' = claude-mem's own spend, 'user' = the operator's own sessions. */
+  source: 'plugin' | 'user';
+  /** Which part of the plugin, or 'session' for user rows. */
+  component: 'observer' | 'vectorless' | 'session';
+  platformSource?: string;
+  project?: string | null;
+  sessionDbId?: number | null;
+  contentSessionId?: string | null;
+  model?: string | null;
+  inputTokens?: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  outputTokens?: number;
+  thinkingTokens?: number;
+  /** NULL when the provider did not report one. Never estimated. */
+  costUsd?: number | null;
+  isSidechain?: boolean;
+  epoch: number;
+}
+
+/** Byte-offset watermark for one transcript file. */
+export interface TranscriptReadState {
+  transcriptPath: string;
+  byteOffset: number;
+  fileSize: number;
+  lastMessageId: string | null;
+  updatedAtEpoch: number;
+}

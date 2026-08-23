@@ -196,3 +196,48 @@ export interface DBSession {
 }
 
 export type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+
+/** One series' worth of token spend in one bucket. Shape of GET /api/token-burn. */
+export interface TokenBurnTotals {
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+  /**
+   * input + cacheCreation + output. The default chart metric: cache reads bill
+   * at roughly a tenth and are ~190k per observer turn, so plotting raw totals
+   * would overstate the plugin's cost by an order of magnitude.
+   */
+  billableTokens: number;
+  /** billable + cacheRead. Available as a toggle, never the default. */
+  totalTokens: number;
+  /** null when nothing in scope reported a price. Never estimated. */
+  costUsd: number | null;
+  events: number;
+}
+
+export interface TokenBurnBucket {
+  /** Local calendar day, YYYY-MM-DD. */
+  bucket: string;
+  plugin: TokenBurnTotals;
+  user: TokenBurnTotals;
+}
+
+/** Shape of GET /api/token-burn. */
+export interface TokenBurnResponse {
+  bucket: 'day';
+  days: number;
+  buckets: TokenBurnBucket[];
+  totals: {
+    plugin: TokenBurnTotals;
+    user: TokenBurnTotals;
+    /** plugin.billable / user.billable, or null when the user series is empty. */
+    overheadRatio: number | null;
+  };
+  /** False means the user series is switched off, not that spend was zero. */
+  userCaptureEnabled: boolean;
+  /** Platforms whose user-side spend this build can actually read. */
+  platformsCovered: string[];
+  /** Date of the first recorded event — there is no history before install. */
+  since: string | null;
+}

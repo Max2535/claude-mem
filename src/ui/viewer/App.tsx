@@ -6,6 +6,7 @@ import { ComingSoon } from './components/ComingSoon';
 import { Feed } from './components/Feed';
 import { Explorer } from './components/Explorer';
 import { Chat } from './components/Chat';
+import { TokenBurn } from './components/TokenBurn';
 import { System } from './components/System';
 import { ContextSettingsModal } from './components/ContextSettingsModal';
 import { LogsDrawer } from './components/LogsModal';
@@ -166,7 +167,8 @@ export function App() {
             />
           )}
 
-          {route === 'chat' && (
+          {route === 'burn' && <TokenBurn currentFilter={currentFilter} />}
+      {route === 'chat' && (
             <Chat
               currentFilter={currentFilter}
               turns={chatTurns}

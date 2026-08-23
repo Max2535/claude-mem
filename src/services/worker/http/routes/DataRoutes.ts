@@ -18,6 +18,13 @@ import { getObservationsByFilePath } from '../../../sqlite/observations/get.js';
 import { getFirstObservationCreatedAt } from '../../../sqlite/observations/recent.js';
 import { getUptimeSeconds } from '../../../../shared/uptime.js';
 import { assertCanonicalDecimal, type ContentKind } from '../../../sync/CanonicalContent.js';
+import { parseBoundedInt } from '../../SearchManager.js';
+import { SettingsDefaultsManager } from '../../../../shared/SettingsDefaultsManager.js';
+import { USER_SETTINGS_PATH } from '../../../../shared/paths.js';
+
+/** Default and hard ceiling for the Token Burn window, in local days. */
+const TOKEN_BURN_DEFAULT_DAYS = 30;
+const TOKEN_BURN_MAX_DAYS = 365;
 
 const integerArrayLike = z.preprocess((value) => {
   if (Array.isArray(value)) return value;
@@ -87,6 +94,7 @@ export class DataRoutes extends BaseRouteHandler {
     app.get('/api/observation/:id', this.handleGetObservationById.bind(this));
     app.get('/api/observations/by-file', this.handleGetObservationsByFile.bind(this));
     app.get('/api/explorer/day', this.handleGetExplorerDay.bind(this));
+    app.get('/api/token-burn', this.handleGetTokenBurn.bind(this));
     app.post('/api/observations/batch', validateBody(observationsBatchSchema), this.handleGetObservationsByIds.bind(this));
     app.get('/api/session/:id', this.handleGetSessionById.bind(this));
     app.post('/api/sdk-sessions/batch', validateBody(sdkSessionsBatchSchema), this.handleGetSdkSessionsByIds.bind(this));
@@ -108,6 +116,32 @@ export class DataRoutes extends BaseRouteHandler {
     const sessionId = DataRoutes.firstString(req.query.session);
     const result = this.paginationHelper.getObservations(offset, limit, project, platformSource, sessionId);
     res.json(result);
+  });
+
+  /**
+   * Token spend per day for the two Token Burn series.
+   *
+   * Window is clamped hard: this endpoint is unauthenticated and local, and
+   * an unbounded `days` would let a stray request group the whole table.
+   */
+  private handleGetTokenBurn = this.wrapHandler((req: Request, res: Response): void => {
+    const bucket = DataRoutes.firstString(req.query.bucket) ?? 'day';
+    if (bucket !== 'day') {
+      this.badRequest(res, 'bucket must be day');
+      return;
+    }
+
+    const requested = parseBoundedInt(req.query.days, 1);
+    const days = Math.min(requested ?? TOKEN_BURN_DEFAULT_DAYS, TOKEN_BURN_MAX_DAYS);
+    const project = DataRoutes.firstString(req.query.project);
+    const platformSource = this.getOptionalPlatformSourceFromRequest(req);
+
+    const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+    // Reported rather than inferred from an empty series: "capture is off" and
+    // "you spent nothing" look identical in the data and must not in the UI.
+    const userCaptureEnabled = settings.CLAUDE_MEM_TOKEN_BURN_CAPTURE === 'true';
+
+    res.json(this.paginationHelper.getTokenBurn(days, project, platformSource, userCaptureEnabled));
   });
 
   private handleGetExplorerDay = this.wrapHandler((req: Request, res: Response): void => {

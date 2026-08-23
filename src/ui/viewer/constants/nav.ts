@@ -2,7 +2,7 @@
  * Sidebar destinations. `id` doubles as the URL hash (#/home), so renaming one
  * breaks bookmarks — add rather than rename.
  */
-export type RouteId = 'home' | 'recall' | 'explorer' | 'chat' | 'system';
+export type RouteId = 'home' | 'recall' | 'explorer' | 'burn' | 'chat' | 'system';
 
 export interface NavItem {
   id: RouteId;
@@ -32,6 +32,12 @@ export const NAV_ITEMS: NavItem[] = [
     id: 'explorer',
     label: 'Explorer',
     icon: 'M12 3v6m0 0-5 4m5-4 5 4M7 13v4m10-4v4M4 20h6m4 0h6',
+    built: true,
+  },
+  {
+    id: 'burn',
+    label: 'Token Burn',
+    icon: 'M12 3c.5 3 3 4.2 3 7a3 3 0 0 1-6 0c0-1 .4-1.8 1-2.5M12 21a6 6 0 0 0 6-6c0-3.5-2.5-5.5-4-9',
     built: true,
   },
   {

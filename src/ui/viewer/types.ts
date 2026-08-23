@@ -180,3 +180,39 @@ export interface KeywordSearchResponse {
   totalResults?: number;
   query?: string;
 }
+
+/** One series' spend in one bucket. Mirrors worker-types.ts. */
+export interface TokenBurnTotals {
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+  /** input + cacheCreation + output — the default chart metric. */
+  billableTokens: number;
+  /** billable + cacheRead. A toggle, never the default. */
+  totalTokens: number;
+  /** null means nothing reported a price, which is not the same as free. */
+  costUsd: number | null;
+  events: number;
+}
+
+export interface TokenBurnBucket {
+  bucket: string;
+  plugin: TokenBurnTotals;
+  user: TokenBurnTotals;
+}
+
+/** Shape of GET /api/token-burn. */
+export interface TokenBurnResponse {
+  bucket: 'day';
+  days: number;
+  buckets: TokenBurnBucket[];
+  totals: {
+    plugin: TokenBurnTotals;
+    user: TokenBurnTotals;
+    overheadRatio: number | null;
+  };
+  userCaptureEnabled: boolean;
+  platformsCovered: string[];
+  since: string | null;
+}

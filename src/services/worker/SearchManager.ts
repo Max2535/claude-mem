@@ -7,6 +7,7 @@ import { TimelineService } from './TimelineService.js';
 import type { TimelineItem } from './TimelineService.js';
 import type { ObservationSearchResult, SessionSummarySearchResult, UserPromptSearchResult } from '../sqlite/types.js';
 import { logger } from '../../utils/logger.js';
+import { randomUUID } from 'crypto';
 import { getProjectContext } from '../../utils/project-name.js';
 import { normalizePlatformSource } from '../../shared/platform-source.js';
 import { formatDate, formatTime, formatDateTime, extractFirstFile, groupByDate, estimateTokens } from '../../shared/timeline-formatting.js';
@@ -19,7 +20,7 @@ import {
 import { ResultFormatter } from './search/ResultFormatter.js';
 import { ChromaUnavailableError } from './search/errors.js';
 import { VectorlessSearchStrategy, type VectorlessConfig } from './search/strategies/VectorlessSearchStrategy.js';
-import { runVectorlessLlm } from './search/vectorless/llm-runner.js';
+import { createVectorlessLlmRunner, productionVectorlessLlmDeps } from './search/vectorless/llm-runner.js';
 import { SettingsDefaultsManager, type SettingsDefaults } from '../../shared/SettingsDefaultsManager.js';
 import { USER_SETTINGS_PATH } from '../../shared/paths.js';
 
@@ -76,8 +77,38 @@ export class SearchManager {
   ) {
     const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
     const vectorlessConfig = buildVectorlessConfig(settings);
+    // The runner is built here rather than imported as a module singleton so
+    // its usage hook can reach this store. Project stays null: the runner is
+    // constructed once, while project is a per-query argument — vectorless
+    // spend is therefore reported as unattributed rather than misattributed.
+    const vectorlessLlm = createVectorlessLlmRunner({
+      ...productionVectorlessLlmDeps,
+      recordUsage: usage => {
+        try {
+          sessionStore.recordTokenUsage({
+            // Each traversal is a fresh stateless SDK session with no resume,
+            // so the result's cumulative total_cost_usd IS this call's cost —
+            // no delta against a prior baseline to compute.
+            eventKey: `plugin:vectorless:${usage.uuid ?? randomUUID()}`,
+            source: 'plugin',
+            component: 'vectorless',
+            project: null,
+            model: usage.model,
+            inputTokens: usage.inputTokens,
+            cacheCreationTokens: usage.cacheCreationTokens,
+            cacheReadTokens: usage.cacheReadTokens,
+            outputTokens: usage.outputTokens,
+            costUsd: usage.costUsd,
+            epoch: Date.now(),
+          });
+        } catch (error) {
+          logger.warn('SEARCH', 'Vectorless token usage not recorded — continuing', {},
+            error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+    });
     this.vectorlessStrategy = vectorlessConfig
-      ? new VectorlessSearchStrategy(sessionSearch, runVectorlessLlm, vectorlessConfig)
+      ? new VectorlessSearchStrategy(sessionSearch, vectorlessLlm, vectorlessConfig)
       : null;
     this.orchestrator = new SearchOrchestrator(
       sessionSearch,

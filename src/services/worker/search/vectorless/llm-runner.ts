@@ -33,7 +33,25 @@ export interface VectorlessLlmDeps {
   acquireSlot(): Promise<SlotReservation>;
   /** Runs one traversal call, yielding SDK messages until the process ends. */
   runQuery(prompt: string, abortController: AbortController): AsyncIterable<any>;
+  /**
+   * Persists this call's spend. Optional so a test can drive the runner
+   * without a database; production supplies it. Like every other accounting
+   * hook here it must not throw — a failed write is a gap in a chart, an
+   * exception is a failed search.
+   */
+  recordUsage?(usage: VectorlessTurnUsage): void;
   timeoutMs?: number;
+}
+
+/** The SDK result message's finalized per-turn usage, already unpacked. */
+export interface VectorlessTurnUsage {
+  model: string | null;
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+  uuid: string | null;
 }
 
 /**
@@ -57,6 +75,21 @@ export function createVectorlessLlmRunner(deps: VectorlessLlmDeps): (prompt: str
       let answer = '';
       try {
         for await (const msg of deps.runQuery(prompt, abortController)) {
+          if (msg.type === 'result' && deps.recordUsage) {
+            // A traversal is up to two SDK subprocesses per query and is
+            // invisible in every other accounting surface. Left unrecorded it
+            // is the one slice of the plugin's spend the burn chart cannot see.
+            const usage = msg.usage ?? {};
+            deps.recordUsage({
+              model: typeof msg.model === 'string' ? msg.model : null,
+              inputTokens: usage.input_tokens ?? 0,
+              cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+              cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+              outputTokens: usage.output_tokens ?? 0,
+              costUsd: typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : null,
+              uuid: typeof msg.uuid === 'string' ? msg.uuid : null,
+            });
+          }
           if (msg.type === 'assistant') {
             answer = msg.message.content
               .filter((b: any) => b.type === 'text')

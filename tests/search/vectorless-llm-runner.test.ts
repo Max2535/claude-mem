@@ -179,3 +179,75 @@ describe('createVectorlessLlmRunner', () => {
     expect(controllers[0].signal.aborted).toBe(false);
   });
 });
+
+describe('vectorless usage reporting', () => {
+  function reservation() {
+    return { release: () => {}, released: false } as any;
+  }
+
+  async function* stream(...messages: any[]) {
+    for (const msg of messages) yield msg;
+  }
+
+  test('reports the result message usage once, with the buckets kept apart', async () => {
+    const seen: any[] = [];
+    const run = createVectorlessLlmRunner({
+      acquireSlot: async () => reservation(),
+      runQuery: () => stream(
+        { type: 'assistant', message: { content: [{ type: 'text', text: '{"days":[]}' }] } },
+        {
+          type: 'result',
+          uuid: 'res-1',
+          model: 'claude-sonnet-5',
+          total_cost_usd: 0.004,
+          usage: { input_tokens: 3, cache_creation_input_tokens: 900, cache_read_input_tokens: 12000, output_tokens: 40 },
+        },
+      ),
+      recordUsage: usage => seen.push(usage),
+    });
+
+    await run('prompt');
+
+    expect(seen.length).toBe(1);
+    expect(seen[0]).toEqual({
+      model: 'claude-sonnet-5',
+      inputTokens: 3,
+      cacheCreationTokens: 900,
+      cacheReadTokens: 12000,
+      outputTokens: 40,
+      costUsd: 0.004,
+      uuid: 'res-1',
+    });
+  });
+
+  test('reports zeros rather than dropping a result that carried no usage', async () => {
+    const seen: any[] = [];
+    const run = createVectorlessLlmRunner({
+      acquireSlot: async () => reservation(),
+      runQuery: () => stream(
+        { type: 'assistant', message: { content: [{ type: 'text', text: 'ok' }] } },
+        { type: 'result' },
+      ),
+      recordUsage: usage => seen.push(usage),
+    });
+
+    await run('prompt');
+
+    expect(seen.length).toBe(1);
+    expect(seen[0].outputTokens).toBe(0);
+    expect(seen[0].costUsd).toBeNull();
+    expect(seen[0].uuid).toBeNull();
+  });
+
+  test('still answers when no usage hook is supplied at all', async () => {
+    const run = createVectorlessLlmRunner({
+      acquireSlot: async () => reservation(),
+      runQuery: () => stream(
+        { type: 'assistant', message: { content: [{ type: 'text', text: 'answer' }] } },
+        { type: 'result', usage: { output_tokens: 1 } },
+      ),
+    });
+
+    expect(await run('prompt')).toBe('answer');
+  });
+});

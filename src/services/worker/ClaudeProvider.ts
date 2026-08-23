@@ -2,6 +2,7 @@
 import { DatabaseManager } from './DatabaseManager.js';
 import { SessionManager } from './SessionManager.js';
 import { logger } from '../../utils/logger.js';
+import { recordPluginTokenUsage, turnCostFromCumulative } from './token-usage/plugin-usage.js';
 import { buildInitPrompt, buildObservationPrompt, buildSummaryPrompt, buildContinuationPrompt } from '../../sdk/prompts.js';
 import { SettingsDefaultsManager } from '../../shared/SettingsDefaultsManager.js';
 import { USER_SETTINGS_PATH, OBSERVER_SESSIONS_DIR, ensureDir, paths } from '../../shared/paths.js';
@@ -411,13 +412,30 @@ export class ClaudeProvider {
             output_tokens?: number;
           } | undefined;
           const totalCostUsd = (message as any).total_cost_usd as number | undefined;
-          let turnCostUsd: number | undefined;
+          const turnCostUsd = turnCostFromCumulative(totalCostUsd, session.lastResultTotalCostUsd);
           if (typeof totalCostUsd === 'number') {
-            const prior = session.lastResultTotalCostUsd ?? 0;
-            // A total below the prior baseline means the SDK session restarted
-            // and its accumulator reset — the new total IS the turn's cost.
-            turnCostUsd = totalCostUsd >= prior ? totalCostUsd - prior : totalCostUsd;
             session.lastResultTotalCostUsd = totalCostUsd;
+          }
+
+          // Outside the pendingCompressionEvent guard on purpose: a turn that
+          // produced no compression event still spent these tokens, and a
+          // burn chart that only counts successful compressions understates
+          // the plugin's real cost.
+          if (resultUsage) {
+            recordPluginTokenUsage(
+              this.dbManager,
+              session,
+              'observer',
+              `plugin:claude:${(message as any).uuid ?? `${session.sessionDbId}:${session.lastPromptSentAt ?? Date.now()}`}`,
+              {
+                model: modelId ?? session.lastModelId ?? null,
+                inputTokens: resultUsage.input_tokens ?? 0,
+                cacheCreationTokens: resultUsage.cache_creation_input_tokens ?? 0,
+                cacheReadTokens: resultUsage.cache_read_input_tokens ?? 0,
+                outputTokens: resultUsage.output_tokens ?? 0,
+                costUsd: turnCostUsd ?? null,
+              }
+            );
           }
 
           const pending = session.pendingCompressionEvent;
