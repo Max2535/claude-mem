@@ -1,14 +1,14 @@
 {
-  "name": "thedotmack",
+  "name": "max2535",
   "owner": {
-    "name": "Alex Newman"
+    "name": "Max"
   },
   "metadata": {
-    "description": "Plugins by Alex Newman (thedotmack)"
+    "description": "Plugins by Max (Max2535) - fork of thedotmack/claude-mem"
   },
   "plugins": [
     {
-      "name": "claude-mem",
+      "name": "claude-mem-pro-max",
       "version": "13.15.3",
       "source": "./plugin",
       "description": "Persistent memory system for Claude Code - context compression across sessions"

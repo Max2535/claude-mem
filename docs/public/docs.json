@@ -39,6 +39,8 @@
           "usage/openrouter-provider",
           "usage/gemini-provider",
           "usage/search-tools",
+          "usage/viewer-explorer",
+          "usage/vectorless-retrieval",
           "usage/knowledge-agents",
           "usage/claude-desktop",
           "usage/private-tags",
@@ -108,6 +110,7 @@
           "architecture/worker-service",
           "architecture/database",
           "architecture/search-architecture",
+          "architecture/viewer-explorer-dag",
           "architecture/pm2-to-bun-migration"
         ]
       }

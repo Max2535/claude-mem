@@ -14,8 +14,6 @@ import type { WorkerService } from '../../../worker-service.js';
 import { BaseRouteHandler } from '../BaseRouteHandler.js';
 import { SessionEventBroadcaster } from '../../events/SessionEventBroadcaster.js';
 import { PrivacyCheckValidator } from '../../validation/PrivacyCheckValidator.js';
-import { SettingsDefaultsManager } from '../../../../shared/SettingsDefaultsManager.js';
-import { USER_SETTINGS_PATH } from '../../../../shared/paths.js';
 import { getProjectContext } from '../../../../utils/project-name.js';
 import { handleGeneratorExit } from '../../session/GeneratorExitHandler.js';
 import { telemetryBuffer } from '../../../telemetry/buffer.js';
@@ -32,6 +30,9 @@ import { findClaudeExecutable } from '../../../../shared/find-claude-executable.
 import { recordObserverFailure } from '../../../../shared/observer-health.js';
 import { isClassified, describeProviderError } from '../../provider-errors.js';
 import { classifyClaudeError } from '../../ClaudeProvider.js';
+import { ingestTranscriptUsage } from '../../token-usage/transcript-usage.js';
+import { SettingsDefaultsManager } from '../../../../shared/SettingsDefaultsManager.js';
+import { USER_SETTINGS_PATH } from '../../../../shared/paths.js';
 
 const MAX_USER_PROMPT_BYTES = 256 * 1024;
 
@@ -326,6 +327,7 @@ export class SessionRoutes extends BaseRouteHandler {
     last_assistant_message: z.string().optional(),
     agentId: z.string().optional(),
     platformSource: z.string().optional(),
+    transcriptPath: z.string().optional(),
   }).passthrough();
 
   private handleObservationsByClaudeId = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
@@ -367,9 +369,41 @@ export class SessionRoutes extends BaseRouteHandler {
     res.json({ status: 'queued' });
   });
 
+  /**
+   * Tails the Claude Code transcript for per-turn token counts.
+   *
+   * Reads usage numbers only — never message text (see transcript-usage.ts) —
+   * and is gated by CLAUDE_MEM_TOKEN_BURN_CAPTURE because it opens a file we
+   * were handed for a different purpose. Deferred off the request path and
+   * silent on failure: this is accounting, and the summarize response must
+   * neither wait for it nor fail with it.
+   */
+  private ingestTranscriptTokens(transcriptPath: unknown, contentSessionId: string, platformSource: string): void {
+    if (typeof transcriptPath !== 'string' || !transcriptPath) return;
+    setImmediate(() => {
+      try {
+        const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+        ingestTranscriptUsage(this.dbManager.getSessionStore(), {
+          transcriptPath,
+          contentSessionId,
+          platformSource,
+          project: null,
+          enabled: settings.CLAUDE_MEM_TOKEN_BURN_CAPTURE === 'true',
+        });
+      } catch {
+        // ingestTranscriptUsage already logs; nothing here may escape.
+      }
+    });
+  }
+
   private handleSummarizeByClaudeId = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
-    const { contentSessionId, last_assistant_message, agentId } = req.body;
+    const { contentSessionId, last_assistant_message, agentId, transcriptPath } = req.body;
     const platformSource = this.getPlatformSourceFromRequest(req);
+
+    // Fire-and-forget, before the subagent early-return: a subagent turn is
+    // still the user's spend, and summarization latency must not grow because
+    // a chart wanted numbers.
+    this.ingestTranscriptTokens(transcriptPath, contentSessionId, platformSource);
 
     if (agentId) {
       res.json({ status: 'skipped', reason: 'subagent_context' });

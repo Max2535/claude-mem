@@ -1,0 +1,95 @@
+---
+title: "Explorer Dependency Graph"
+description: "Every module and endpoint the viewer's Explorer tab depends on, as a directed acyclic graph"
+---
+
+The [Explorer tab](/usage/viewer-explorer) spans the React viewer, the worker's
+HTTP layer, and SQLite. Below is every edge between them, taken from the actual
+`import` statements and route registrations rather than drawn from memory.
+
+The whole graph is acyclic with a single root, `App.tsx`. It is split in two
+here only so the labels stay readable — the two HTTP endpoints are the seam,
+appearing as leaves in the first graph and roots in the second.
+
+Blue nodes were added for Explorer, amber nodes already existed and were
+modified, grey nodes are used unchanged.
+
+## Viewer side
+
+```mermaid
+flowchart LR
+  classDef new fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef touched fill:#fef3c7,stroke:#d97706,color:#5a3d00
+  classDef existing fill:#f1f5f9,stroke:#94a3b8,color:#334155
+
+  App["App.tsx"]:::touched
+  Route["useRoute.ts"]:::touched
+  Nav["constants/nav.ts"]:::touched
+  Exp["Explorer.tsx"]:::new
+  Graph["TreeGraph.tsx"]:::new
+  Hook["useExplorerDay.ts"]:::new
+  Tidy["utils/tidyTree.ts"]:::new
+  Hier["utils/explorerHierarchy.ts"]:::new
+  Card["ObservationCard.tsx"]:::existing
+  E1(["/api/explorer/day"]):::new
+  E2(["/api/observation/:id"]):::existing
+
+  App --> Route
+  App --> Nav
+  App --> Exp
+  Route --> Nav
+  Exp --> Graph
+  Exp --> Hook
+  Exp --> Hier
+  Exp --> Card
+  Exp --> E2
+  Graph --> Tidy
+  Graph --> Hier
+  Hook --> E1
+```
+
+## Worker side
+
+```mermaid
+flowchart TD
+  classDef new fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef touched fill:#fef3c7,stroke:#d97706,color:#5a3d00
+  classDef existing fill:#f1f5f9,stroke:#94a3b8,color:#334155
+
+  E1(["/api/explorer/day"]):::new
+  E2(["/api/observation/:id"]):::existing
+  DR["DataRoutes.ts"]:::touched
+  PH["PaginationHelper.ts"]:::touched
+  WT["worker-types.ts"]:::touched
+  DB["DatabaseManager to SessionStore"]:::existing
+  SQL[("SQLite: observations, sdk_sessions")]:::existing
+
+  E1 --> DR
+  E2 --> DR
+  DR --> PH
+  PH --> WT
+  PH --> DB
+  DB --> SQL
+```
+
+## What the shape tells you
+
+**The layout is split from the data.** `tidyTree.ts` knows nothing about
+memory; it turns any tree into positioned nodes. `explorerHierarchy.ts` knows
+nothing about pixels; it turns a day's rows into a tree. `TreeGraph.tsx` is the
+only file that holds both, which is why the two grouping modes cost no extra
+request — they are a different call into the second file, not a different
+fetch.
+
+**Two endpoints, both through `DataRoutes.ts`.** The day endpoint feeds the
+graph; the single-observation endpoint exists only for the detail panel and for
+deep links, which have to resolve an id before any day is known.
+
+**The tree carries two session ids.** `sessionId` is the `memory_session_id`
+observations actually hold; `contentSessionId` is what the session tier groups
+on, because the worker rotates the former whenever a session continues.
+
+**Nothing points back up.** No worker module imports a viewer module, and no
+util imports a component, which is what keeps the graph acyclic. A new edge
+that violates this — a shared helper importing `App.tsx`, say — would introduce
+a cycle and should be split instead.

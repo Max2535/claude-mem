@@ -92,8 +92,8 @@ function removeFromKnownMarketplaces(): void {
 
 function removeFromInstalledPlugins(): void {
   const installedPlugins = readJsonSafe<Record<string, any>>(installedPluginsPath(), {});
-  if (installedPlugins.plugins?.['claude-mem@thedotmack']) {
-    delete installedPlugins.plugins['claude-mem@thedotmack'];
+  if (installedPlugins.plugins?.['claude-mem-pro-max@max2535']) {
+    delete installedPlugins.plugins['claude-mem-pro-max@max2535'];
     writeJsonFileAtomic(installedPluginsPath(), installedPlugins);
   }
 }
@@ -133,8 +133,8 @@ export function removeFromClaudeSettings(): void {
   const settings = readJsonSafe<Record<string, any>>(claudeSettingsPath(), {});
   let dirty = false;
 
-  if (settings.enabledPlugins?.['claude-mem@thedotmack'] !== undefined) {
-    delete settings.enabledPlugins['claude-mem@thedotmack'];
+  if (settings.enabledPlugins?.['claude-mem-pro-max@max2535'] !== undefined) {
+    delete settings.enabledPlugins['claude-mem-pro-max@max2535'];
     dirty = true;
   }
 

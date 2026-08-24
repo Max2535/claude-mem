@@ -18,7 +18,6 @@ import { shouldTrackProject } from '../../shared/should-track-project.js';
 import { readStaleMarker } from '../../shared/oauth-token.js';
 import { normalizePlatformSource } from '../../shared/platform-source.js';
 import { callMcpToolOnce } from '../../shared/mcp-client.js';
-import { proTrialLine } from '../../shared/pro-promo.js';
 
 async function requestSessionStartContext(args: {
   projects: string[];
@@ -160,7 +159,7 @@ export const contextHandler: EventHandler = {
     const displayContent = coloredTimeline || (platform === 'antigravity-cli' ? additionalContext : '');
 
     const systemMessage = showTerminalOutput && displayContent
-      ? `${displayContent}\n\nView Observations Live @ http://localhost:${port}\n${proTrialLine('session-start')}`
+      ? `${displayContent}\n\nView Observations Live @ http://localhost:${port}`
       : undefined;
 
     return {

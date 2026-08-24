@@ -61,6 +61,64 @@ export function createCorsMiddleware(): RequestHandler {
   };
 }
 
+/**
+ * Hosts a browser page may be served from and still be one of ours. Same set
+ * createCorsMiddleware allows, but matched on the parsed host rather than a
+ * string prefix, so http://localhost.evil.com cannot pass as localhost.
+ */
+const LOCAL_BROWSER_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+function isLocalBrowserOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    // http only, matching the CORS rule: the worker never serves https locally,
+    // so an https origin claiming to be localhost is not one of our pages.
+    return url.protocol === 'http:' && LOCAL_BROWSER_HOSTS.has(url.hostname);
+  } catch {
+    // "null" (sandboxed iframe, file://) and anything unparseable land here.
+    return false;
+  }
+}
+
+/**
+ * Reject cross-origin browser requests to routes that spawn a subprocess.
+ *
+ * GET /api/search/temporal is local and unauthenticated, and every request runs
+ * a Claude Agent SDK subprocess. Any page in any browser can reach localhost,
+ * so without this a visited web page could make the machine spawn agents. The
+ * concurrency cap and the 120s timeout bound what that costs; they do not stop
+ * it from starting.
+ *
+ * Non-browser callers — the MCP server, the CLI, curl — send no Origin and no
+ * Referer and must still pass; the viewer's own fetch is same-origin, which
+ * sends no Origin either but does send a Referer. So: judge the Origin when
+ * there is one, fall back to the Referer, and let a request carrying neither
+ * through.
+ */
+export function rejectCrossOriginSubprocessRoutes(req: Request, res: Response, next: NextFunction): void {
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  const claimed = typeof origin === 'string' && origin
+    ? origin
+    : (typeof referer === 'string' && referer ? referer : null);
+
+  if (claimed !== null && !isLocalBrowserOrigin(claimed)) {
+    logger.warn('SECURITY', 'Cross-origin request to a subprocess-spawning route denied', {
+      endpoint: req.path,
+      method: req.method,
+      // The header, not the page: a full Referer carries the path the user was on.
+      claimedOrigin: origin ? String(origin) : 'referer',
+    });
+    res.status(403).json({
+      error: 'Forbidden',
+      message: 'This endpoint does not accept cross-origin requests',
+    });
+    return;
+  }
+
+  next();
+}
+
 export function requireLocalhost(req: Request, res: Response, next: NextFunction): void {
   const clientIp = req.ip || req.connection.remoteAddress || '';
   const isLocalhost =

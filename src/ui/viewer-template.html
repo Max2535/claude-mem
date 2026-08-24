@@ -76,6 +76,29 @@
       --color-observation-badge-bg: rgba(9, 105, 218, 0.12);
       --color-observation-badge-text: #0550ae;
 
+      --color-chart-observation: #0969da;
+      --color-chart-summary: #9a6700;
+      --color-chart-prompt: #8250df;
+      --color-chart-grid: #e4e0d8;
+      --color-chart-burn-plugin: #b8571f;
+      --color-chart-burn-user: #1f7a5a;
+      --color-chart-burn-plugin-fill: rgba(184, 87, 31, 0.16);
+      --color-chart-burn-user-fill: rgba(31, 122, 90, 0.16);
+
+      /* Agent Flow node borders. Distinct from the chart-burn and
+         observation/summary/prompt hues, which already carry other meanings
+         across the viewer — a flow node must not read as a token series. */
+      --color-flow-node-model: #3f6ed4;
+      --color-flow-node-tool: #2f8f5b;
+      --color-flow-node-output: #b6b0a4;
+      --color-flow-node-marker: #cfc9bd;
+      --color-flow-connector: #b3aca0;
+
+      /* Explorer tree: the time-block tier, the one node colour the chart
+         palette does not already cover. */
+      --color-tree-block-fill: #d9f0e2;
+      --color-tree-block-stroke: #3f9e6b;
+
       --color-skeleton-base: #d0d7de;
       --color-skeleton-highlight: #e8ecef;
 
@@ -135,6 +158,23 @@
       --color-accent-summary: #d4b888;
       --color-accent-prompt: #8e7cbc;
       --color-accent-observation: #79b8ff;
+      --color-chart-observation: #4793de;
+      --color-chart-summary: #ba8400;
+      --color-chart-prompt: #a278d1;
+      --color-chart-grid: #3a3630;
+      --color-chart-burn-plugin: #e08c4a;
+      --color-chart-burn-user: #3fae86;
+      --color-chart-burn-plugin-fill: rgba(224, 140, 74, 0.20);
+      --color-chart-burn-user-fill: rgba(63, 174, 134, 0.20);
+
+      --color-flow-node-model: #5b8cf0;
+      --color-flow-node-tool: #4cb37c;
+      --color-flow-node-output: #55504a;
+      --color-flow-node-marker: #45413c;
+      --color-flow-connector: #56514a;
+
+      --color-tree-block-fill: #1d3327;
+      --color-tree-block-stroke: #4a9e72;
 
       --color-type-badge-bg: rgba(88, 166, 255, 0.125);
       --color-type-badge-text: #58a6ff;
@@ -275,6 +315,23 @@
         --color-accent-summary: #f2cc60;
         --color-accent-prompt: #8e6cdb;
         --color-accent-observation: #79b8ff;
+      --color-chart-observation: #4793de;
+      --color-chart-summary: #ba8400;
+      --color-chart-prompt: #a278d1;
+      --color-chart-grid: #3a3630;
+      --color-chart-burn-plugin: #e08c4a;
+      --color-chart-burn-user: #3fae86;
+      --color-chart-burn-plugin-fill: rgba(224, 140, 74, 0.20);
+      --color-chart-burn-user-fill: rgba(63, 174, 134, 0.20);
+
+      --color-flow-node-model: #5b8cf0;
+      --color-flow-node-tool: #4cb37c;
+      --color-flow-node-output: #55504a;
+      --color-flow-node-marker: #45413c;
+      --color-flow-connector: #56514a;
+
+      --color-tree-block-fill: #1d3327;
+      --color-tree-block-stroke: #4a9e72;
 
         --color-type-badge-bg: rgba(88, 166, 255, 0.125);
         --color-type-badge-text: #58a6ff;
@@ -396,7 +453,8 @@
     }
 
     .settings-btn,
-    .theme-toggle-btn {
+    .theme-toggle-btn,
+    .console-toggle-btn {
       background: var(--color-bg-card);
       border: 1px solid var(--color-border-primary);
       border-radius: 6px;
@@ -413,7 +471,8 @@
     }
 
     .settings-btn:hover,
-    .theme-toggle-btn:hover {
+    .theme-toggle-btn:hover,
+    .console-toggle-btn:hover {
       background: var(--color-bg-card-hover);
       border-color: var(--color-border-focus);
       color: var(--color-text-primary);
@@ -483,42 +542,6 @@
       }
     }
 
-    /* cmem Pro trial CTA — lives in .header-main so the responsive rules that
-       hide .icon-link on tablet/mobile leave it alone. */
-    .pro-trial-cta {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      height: 30px;
-      padding: 0 12px;
-      border: 1px solid var(--color-accent-primary);
-      border-radius: 999px;
-      color: var(--color-accent-primary);
-      background: var(--color-bg-card);
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: -0.01em;
-      white-space: nowrap;
-      text-decoration: none;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .pro-trial-cta:hover {
-      background: var(--color-bg-card-hover);
-      border-color: var(--color-accent-focus);
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-    }
-
-    .pro-trial-cta svg {
-      flex-shrink: 0;
-    }
-
-    /* Full pitch by default; the shortened label takes over on narrow screens. */
-    .pro-trial-cta-short {
-      display: none;
-    }
-
     .icon-link {
       display: flex;
       align-items: center;
@@ -543,7 +566,8 @@
     }
 
     .settings-icon,
-    .theme-toggle-btn svg {
+    .theme-toggle-btn svg,
+    .console-toggle-btn svg {
       width: 18px;
       height: 18px;
     }
@@ -1414,15 +1438,6 @@
         display: none;
       }
 
-      /* Keep the trial CTA, but drop to the shorter label */
-      .pro-trial-cta-full {
-        display: none;
-      }
-
-      .pro-trial-cta-short {
-        display: inline;
-      }
-
       /* Feed adjustments */
       .feed {
         padding: 20px 16px;
@@ -1502,25 +1517,9 @@
         display: none;
       }
 
-      /* The CTA stays — it is the whole point of the bar for free users.
-         Shortest label, sized to match the other mobile controls. */
-      .pro-trial-cta {
-        height: 28px;
-        padding: 0 10px;
-        font-size: 11px;
-        flex-shrink: 0;
-      }
-
-      .pro-trial-cta-full {
-        display: none;
-      }
-
-      .pro-trial-cta-short {
-        display: inline;
-      }
-
       .settings-btn,
       .theme-toggle-btn,
+      .console-toggle-btn,
       .icon-link {
         width: 32px;
         height: 32px;
@@ -1529,6 +1528,7 @@
 
       .settings-icon,
       .theme-toggle-btn svg,
+      .console-toggle-btn svg,
       .icon-link svg {
         width: 16px;
         height: 16px;
@@ -2065,36 +2065,6 @@
     }
 
     /* Console Drawer - Chrome DevTools Style */
-    .console-toggle-btn {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: var(--color-bg-button);
-      border: none;
-      color: white;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      transition: all 0.2s ease;
-      z-index: 999;
-    }
-
-    .console-toggle-btn:hover {
-      background: var(--color-bg-button-hover);
-      transform: scale(1.05);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
-    }
-
-    .console-toggle-btn svg {
-      width: 20px;
-      height: 20px;
-    }
-
     .console-drawer {
       position: fixed;
       bottom: 0;
@@ -2451,6 +2421,1456 @@
 
       .toggle-switch.on .toggle-knob {
         transform: translateX(16px);
+      }
+    }
+
+    /* ==================================================================
+       App shell — sidebar + main column
+       The pre-shell layout stacked .header and a 100vh .feed directly in
+       the body; .feed is re-anchored to the main column below so the two
+       do not sum past the viewport.
+       ================================================================== */
+
+    .app-shell {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 208px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 16px 12px;
+      border-right: 1px solid var(--color-border-primary);
+      background: var(--color-bg-secondary);
+      overflow-y: auto;
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 8px 16px;
+      min-width: 0;
+    }
+
+    .sidebar-logomark-wrap {
+      position: relative;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand-text {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--color-text-logo);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-nav {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .sidebar-nav-item {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .sidebar-nav-item:hover {
+      background: var(--color-bg-card-hover);
+      color: var(--color-text-primary);
+    }
+
+    .sidebar-nav-item:focus-visible {
+      outline: 2px solid var(--color-border-focus);
+      outline-offset: -2px;
+    }
+
+    .sidebar-nav-item.is-current {
+      background: var(--color-bg-card);
+      color: var(--color-text-primary);
+      font-weight: 500;
+      box-shadow: inset 2px 0 0 var(--color-accent-primary);
+    }
+
+    .sidebar-nav-item svg {
+      flex-shrink: 0;
+    }
+
+    .sidebar-nav-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-nav-soon {
+      flex-shrink: 0;
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+      border: 1px solid var(--color-border-secondary);
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ==================================================================
+       Page scaffolding
+       ================================================================== */
+
+    .page {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 28px 32px 48px;
+    }
+
+    .page-centered {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .page-head {
+      margin-bottom: 22px;
+    }
+
+    .page-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--color-text-title);
+      line-height: 1.2;
+    }
+
+    .page-subtitle {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    .coming-soon {
+      max-width: 420px;
+      text-align: center;
+      padding: 32px;
+    }
+
+    .coming-soon-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--color-text-title);
+    }
+
+    .coming-soon-body {
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--color-text-secondary);
+    }
+
+    .coming-soon-note {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--color-text-muted);
+    }
+
+    /* ==================================================================
+       Stat tiles
+       ================================================================== */
+
+    .stat-tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    .stat-tiles-placeholder {
+      grid-column: 1 / -1;
+      padding: 20px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-card);
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    .stat-tile {
+      padding: 14px 16px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-card);
+      min-width: 0;
+    }
+
+    .stat-tile-label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+
+    .stat-tile-value {
+      margin-top: 6px;
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.1;
+      color: var(--color-text-primary);
+    }
+
+    .stat-tile-note {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ==================================================================
+       Activity timeline
+       ================================================================== */
+
+    .chart-card {
+      padding: 18px 20px 12px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-card);
+      margin-bottom: 22px;
+    }
+
+    .chart-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .chart-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-text-title);
+    }
+
+    .chart-subtitle {
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    .chart-range {
+      display: flex;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid var(--color-border-secondary);
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .chart-range-btn {
+      padding: 3px 10px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .chart-range-btn:hover {
+      background: var(--color-bg-card-hover);
+      color: var(--color-text-primary);
+    }
+
+    .chart-range-btn.is-active {
+      background: var(--color-accent-primary);
+      color: var(--color-text-button);
+    }
+
+    .chart-plot-wrap {
+      position: relative;
+      width: 100%;
+    }
+
+    .chart-plot {
+      display: block;
+      overflow: visible;
+    }
+
+    .chart-empty {
+      padding: 28px 4px;
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+
+    /* Recessive chrome: hairline, solid, one step off the surface. */
+    .chart-gridline {
+      stroke: var(--color-chart-grid);
+      stroke-width: 1;
+    }
+
+    .chart-lane-rule {
+      stroke: var(--color-chart-grid);
+      stroke-width: 1;
+    }
+
+    /* Text wears text tokens; the coloured dot beside it carries identity. */
+    .chart-lane-label,
+    .chart-tick-label {
+      font-size: 11px;
+      fill: var(--color-text-muted);
+    }
+
+    .chart-lane-label {
+      fill: var(--color-text-secondary);
+    }
+
+    /* The 2px ring in the surface colour keeps overlapping dots legible. */
+    .chart-dot {
+      stroke: var(--color-bg-card);
+      stroke-width: 2;
+    }
+
+    .chart-dot-observation { fill: var(--color-chart-observation); }
+    .chart-dot-summary { fill: var(--color-chart-summary); }
+    .chart-dot-prompt { fill: var(--color-chart-prompt); }
+
+    .chart-tooltip {
+      position: absolute;
+      transform: translate(-50%, calc(-100% - 12px));
+      max-width: 280px;
+      padding: 8px 10px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 6px;
+      background: var(--color-bg-card);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .chart-tooltip-kind {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+
+    .chart-tooltip-label {
+      margin-top: 3px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--color-text-primary);
+    }
+
+    .chart-tooltip-time {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--color-text-secondary);
+    }
+
+    /* ==================================================================
+       Token Burn
+       ================================================================== */
+
+    /* Two control groups on one row: a second .chart-head reads as a layout bug. */
+    .chart-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .burn-series-line {
+      fill: none;
+      stroke-width: 2;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+
+    .burn-series-line.is-plugin { stroke: var(--color-chart-burn-plugin); }
+    .burn-series-line.is-user { stroke: var(--color-chart-burn-user); }
+
+    .burn-series-area { stroke: none; }
+    .burn-series-area.is-plugin { fill: var(--color-chart-burn-plugin-fill); }
+    .burn-series-area.is-user { fill: var(--color-chart-burn-user-fill); }
+
+    /* Direct labels: identity must not rest on hue alone. */
+    .burn-label {
+      font-size: 11px;
+      font-weight: 600;
+      dominant-baseline: middle;
+    }
+
+    .burn-label.is-plugin { fill: var(--color-chart-burn-plugin); }
+    .burn-label.is-user { fill: var(--color-chart-burn-user); }
+
+    .burn-cursor {
+      stroke: var(--color-border-hover);
+      stroke-width: 1;
+      stroke-dasharray: 3 3;
+    }
+
+    .burn-tooltip {
+      position: absolute;
+      pointer-events: none;
+      min-width: 168px;
+      padding: 8px 10px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 6px;
+      background: var(--color-bg-card);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+      font-size: 12px;
+      color: var(--color-text-primary);
+      z-index: 4;
+    }
+
+    .burn-tooltip-day {
+      margin-bottom: 6px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+    }
+
+    .burn-tooltip-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.7;
+    }
+
+    .burn-tooltip-row strong {
+      margin-left: auto;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .burn-swatch {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+
+    .burn-swatch.is-plugin { background: var(--color-chart-burn-plugin); }
+    .burn-swatch.is-user { background: var(--color-chart-burn-user); }
+
+    .burn-note {
+      margin: 16px 0 0;
+      padding: 0 0 0 18px;
+      list-style: disc;
+      font-size: 12px;
+      line-height: 1.8;
+      color: var(--color-text-tertiary);
+    }
+
+    /* ==================================================================
+       Agent Flow — the live pipeline monitor
+
+       Reuses the existing accent tokens rather than defining a burn-style
+       palette of its own: the stage name is spelled out in every row, so colour
+       is decoration here and never the thing that carries identity.
+       ================================================================== */
+    .flow-crumbs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+    }
+
+    .flow-crumb-sep { opacity: 0.55; }
+
+    .flow-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    .flow-pip {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-text-tertiary);
+      flex: none;
+    }
+
+    .flow-pip.is-busy { background: var(--color-accent-success); }
+    .flow-pip.is-idle { background: var(--color-text-tertiary); }
+
+    .flow-status-text { flex: 1; }
+
+    .flow-filter {
+      position: relative;
+      margin-bottom: 14px;
+    }
+
+    .flow-filter-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 36px 8px 12px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--color-text-primary);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border-primary);
+      border-radius: 6px;
+    }
+
+    .flow-filter-input:focus {
+      outline: none;
+      border-color: var(--color-border-focus);
+    }
+
+    .flow-filter-icon {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      fill: var(--color-text-tertiary);
+      pointer-events: none;
+    }
+
+    /* ------------------------------------------------------------------
+       The chart itself: one column of nodes, top-to-bottom through time.
+
+       Nodes are HTML rather than SVG <text>. Tool names and provider strings
+       are arbitrary length, and ellipsis truncation in SVG means guessing a
+       character count against a proportional font — which clips or overflows
+       depending on the string. Only the connectors are SVG.
+       ------------------------------------------------------------------ */
+    .flow-chart {
+      max-height: 62vh;
+      overflow-y: auto;
+      /* Nodes never exceed the column width, so nothing scrolls sideways. */
+      overflow-x: hidden;
+      padding: 18px 12px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-secondary);
+    }
+
+    .flow-chart-column {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      /* Centres the column of left-aligned nodes without centring their text. */
+      width: min(560px, 100%);
+      margin: 0 auto;
+    }
+
+    .flow-connector { display: block; margin-left: 12px; flex: none; }
+
+    .flow-connector-line {
+      fill: none;
+      stroke: var(--color-flow-connector);
+      stroke-width: 1.5;
+    }
+
+    .flow-connector-head {
+      fill: none;
+      stroke: var(--color-flow-connector);
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+    }
+
+    .flow-node {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 12px;
+      border: 1px solid var(--color-flow-node-marker);
+      border-radius: 6px;
+      background: var(--color-bg-primary);
+    }
+
+    .flow-node.is-model { border-color: var(--color-flow-node-model); }
+    .flow-node.is-tool { border-color: var(--color-flow-node-tool); }
+    .flow-node.is-output { border-color: var(--color-flow-node-output); }
+
+    /* Failure wins over kind — but the outcome word is still printed, so the
+       colour is never the only thing saying so. */
+    .flow-node.is-error { border-color: var(--color-accent-error); }
+
+    .flow-node-head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .flow-node-glyph {
+      color: var(--color-flow-node-tool);
+      font-size: 12px;
+      flex: none;
+    }
+
+    .flow-node-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .flow-node-time {
+      flex: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      color: var(--color-text-tertiary);
+    }
+
+    .flow-node-subtitle {
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    /* The produced text is what you came to read, so it gets the larger type
+       and is allowed to wrap rather than truncate. */
+    .flow-node.is-output .flow-node-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-text-tertiary);
+    }
+
+    .flow-node.is-output .flow-node-subtitle {
+      font-size: 13px;
+      color: var(--color-text-primary);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 720px) {
+      .flow-chart { padding: 14px 8px; }
+      .flow-node-time { display: none; }
+    }
+
+    /* ==================================================================
+       Recall call-to-action
+       ================================================================== */
+
+    .recall-cta {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-card);
+      color: var(--color-text-secondary);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .recall-cta:hover {
+      background: var(--color-bg-card-hover);
+      border-color: var(--color-border-hover);
+    }
+
+    .recall-cta-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .recall-cta-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
+
+    .recall-cta-sub {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+
+    /* ==================================================================
+       Feed re-anchored into the main column
+       ================================================================== */
+
+    .app-main .feed {
+      height: auto;
+      min-height: 0;
+    }
+
+    /* Explorer: the tree keeps its natural height, so this column is what
+       scrolls. min-height:0 is what lets it shrink inside .app-main and hand
+       the overflow to its own scrollbar instead of getting clipped. */
+    .explorer {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .explorer-tabs {
+      display: inline-flex;
+      gap: 2px;
+      margin-bottom: 12px;
+      padding: 3px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-secondary);
+      align-self: flex-start;
+    }
+
+    .explorer-tab {
+      padding: 6px 16px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .explorer-tab:hover:not(:disabled) {
+      color: var(--color-text-primary);
+    }
+
+    .explorer-tab.is-active {
+      background: var(--color-accent-primary);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .explorer-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .explorer-stepper {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 3px 4px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-card);
+    }
+
+    .explorer-stepper button {
+      min-width: 26px;
+      padding: 4px 6px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font: inherit;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .explorer-stepper button:hover:not(:disabled) {
+      background: var(--color-bg-card-hover);
+      color: var(--color-text-primary);
+    }
+
+    .explorer-stepper button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .explorer-stepper-value {
+      min-width: 132px;
+      padding: 0 8px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--color-text-primary);
+      white-space: nowrap;
+    }
+
+    .explorer-locate {
+      color: var(--color-accent-primary) !important;
+      font-size: 12.5px !important;
+      padding: 4px 10px !important;
+    }
+
+    .explorer-modes {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-secondary);
+    }
+
+    .explorer-mode {
+      padding: 5px 14px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .explorer-mode.is-active {
+      background: var(--color-accent-primary);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    /* The dotted ground the graph sits on, as in the reference layout. */
+    .tree-graph {
+      /* Never shrink below the tree (flex-shrink 0 + a content basis), but
+         grow to fill the pane on days whose tree is only a tier or two deep.
+         overflow stays for the horizontal axis; vertically it never triggers
+         because the box is sized to the svg. */
+      flex: 1 0 auto;
+      overflow: auto;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 10px;
+      background-color: var(--color-bg-card);
+      background-image: radial-gradient(var(--color-border-secondary) 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+
+    /* Inline svg sits on the text baseline; the few pixels underneath would
+       otherwise overflow the box and raise a vertical scrollbar of its own. */
+    .tree-graph svg {
+      display: block;
+    }
+
+    .tree-graph-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 10px;
+      background: var(--color-bg-card);
+      color: var(--color-text-muted);
+      font-size: 13px;
+    }
+
+    .tree-edges path {
+      fill: none;
+      stroke: var(--color-border-primary);
+      stroke-width: 1;
+    }
+
+    .tree-node circle {
+      stroke-width: 1.5;
+      transition: r 0.12s ease;
+    }
+
+    .tree-node-hit {
+      fill: transparent;
+      stroke: none;
+    }
+
+    /* A folded branch: the ring says there is more underneath without adding
+       another dot to a row that is already crowded. */
+    .tree-node-ring {
+      fill: none;
+      stroke: var(--color-accent-primary);
+      stroke-width: 1;
+      stroke-dasharray: 2 2;
+      opacity: 0.75;
+    }
+
+    .tree-node.is-folded:hover .tree-node-ring {
+      stroke-dasharray: none;
+      opacity: 1;
+    }
+
+    /* The block the time stepper points at. Solid, and drawn outside the
+       dashed fold ring so a node can wear both at once. */
+    .tree-node-current-ring {
+      fill: none;
+      stroke: var(--color-accent-primary);
+      stroke-width: 1.5;
+    }
+
+    /* Locate's answer when the canvas already fits and there is nothing to
+       scroll: one outward ripple, replayed by remounting the circle. */
+    .tree-node-pulse {
+      fill: none;
+      stroke: var(--color-accent-primary);
+      stroke-width: 2;
+      /* Without fill-box, transform-origin resolves against the whole svg
+         viewport, and the ripple scales away from the node it belongs to. */
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: tree-node-pulse 620ms ease-out 1 forwards;
+      pointer-events: none;
+    }
+
+    @keyframes tree-node-pulse {
+      from { transform: scale(1); opacity: 0.7; }
+      to { transform: scale(2.6); opacity: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tree-node-pulse { animation-duration: 1ms; }
+    }
+
+    .tree-node-day .tree-node-dot { fill: var(--color-bg-prompt); stroke: var(--color-border-prompt); }
+    .tree-node-block .tree-node-dot { fill: var(--color-tree-block-fill); stroke: var(--color-tree-block-stroke); }
+    .tree-node-session .tree-node-dot { fill: var(--color-bg-observation); stroke: var(--color-accent-primary); }
+    .tree-node-prompt .tree-node-dot { fill: var(--color-bg-observation); stroke: var(--color-accent-primary); }
+    .tree-node-observation .tree-node-dot { fill: var(--color-border-prompt); stroke: var(--color-border-prompt); }
+
+    .tree-node-observation:hover .tree-node-dot { r: 6; }
+
+    .tree-node-observation.is-selected .tree-node-dot {
+      fill: var(--color-accent-primary);
+      stroke: var(--color-accent-primary);
+      r: 6.5;
+    }
+
+    .tree-node-glyph {
+      text-anchor: middle;
+      font-size: 9px;
+      font-weight: 600;
+      fill: var(--color-text-primary);
+      pointer-events: none;
+    }
+
+    .tree-node-label {
+      text-anchor: middle;
+      font-size: 10px;
+      fill: var(--color-text-secondary);
+      pointer-events: none;
+    }
+
+    /* Leaf labels are rotated because hundreds of them share one baseline. */
+    .tree-node-leaf-label {
+      font-size: 9px;
+      fill: var(--color-text-muted);
+      pointer-events: none;
+    }
+
+    .tree-node-observation.is-selected .tree-node-leaf-label {
+      fill: var(--color-text-primary);
+      font-weight: 600;
+    }
+
+    .explorer-detail-panel {
+      position: relative;
+      /* overflow-y:auto zeroes a flex item's automatic minimum size, so
+         without an explicit basis the canvas shrinks this away entirely. */
+      flex: 0 0 auto;
+      margin-top: 14px;
+      /* A percentage resolves against an auto-height parent as none, which
+         would let a long observation grow without limit. */
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .explorer-detail-close {
+      position: absolute;
+      top: 4px;
+      right: 10px;
+      z-index: 1;
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 6px;
+      background: var(--color-bg-card);
+      color: var(--color-text-secondary);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .explorer-detail-close:hover {
+      color: var(--color-text-primary);
+      background: var(--color-bg-card-hover);
+    }
+
+    /* Explorer Digest: the day in numbers, counted from the same rows the
+       tree draws. */
+    .digest-breakdown {
+      margin-top: 22px;
+    }
+
+    .digest-breakdown-title {
+      margin: 0 0 10px;
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .digest-rows {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .digest-row {
+      display: grid;
+      /* A fixed name column keeps every bar starting on the same line, so the
+         lengths can be compared without measuring from different origins. */
+      grid-template-columns: 110px 1fr 44px;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 0;
+    }
+
+    .digest-row-name {
+      color: var(--color-text-primary);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .digest-row-bar {
+      height: 10px;
+      border-radius: 5px;
+      background: var(--color-bg-stat);
+      overflow: hidden;
+    }
+
+    .digest-row-fill {
+      display: block;
+      height: 100%;
+      border-radius: 5px;
+      background: var(--color-chart-observation);
+    }
+
+    .digest-row-count {
+      color: var(--color-text-secondary);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    @media (max-width: 560px) {
+      .digest-row {
+        grid-template-columns: 88px 1fr 38px;
+        gap: 8px;
+      }
+    }
+
+    /* System: the worker's own vitals, its services, and its log. */
+    .system-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .system-refresh {
+      flex: 0 0 auto;
+      padding: 7px 14px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-button);
+      color: var(--color-text-button);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .system-refresh:hover:not(:disabled) {
+      background: var(--color-bg-button-hover);
+    }
+
+    .system-refresh:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .system-section {
+      margin-top: 24px;
+    }
+
+    .system-section-title {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+
+    .service-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .service-row {
+      padding: 12px 16px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-card);
+    }
+
+    .service-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .service-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .service-pill {
+      flex: 0 0 auto;
+      padding: 2px 9px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      color: var(--color-text-muted);
+    }
+
+    .service-pill.is-ok {
+      color: var(--color-accent-success);
+    }
+
+    .service-pill.is-problem {
+      color: var(--color-accent-error);
+    }
+
+    /* "Off" and "unknown" are not failures, so they stay in muted ink rather
+       than borrowing a colour that would read as an alarm. */
+    .service-pill.is-off,
+    .service-pill.is-unknown {
+      color: var(--color-text-muted);
+    }
+
+    .service-detail {
+      margin: 6px 0 0;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--color-text-secondary);
+      overflow-wrap: anywhere;
+    }
+
+    .service-fix {
+      margin: 4px 0 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--color-text-muted);
+      overflow-wrap: anywhere;
+    }
+
+    /* The console body is shared with the floating drawer; only the frame
+       around it differs. */
+    .console-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .system-console {
+      height: 420px;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* Chat: one question, one answer, and the walk that produced it. */
+    .chat-composer {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .chat-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 9px 12px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-input);
+      color: var(--color-text-primary);
+      font-size: 14px;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: var(--color-border-focus);
+      box-shadow: var(--shadow-focus);
+    }
+
+    .chat-input:disabled {
+      color: var(--color-text-muted);
+    }
+
+    .chat-submit {
+      flex: 0 0 auto;
+      padding: 9px 16px;
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      background: var(--color-bg-button);
+      color: var(--color-text-button);
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .chat-submit:hover:not(:disabled) {
+      background: var(--color-bg-button-hover);
+    }
+
+    .chat-submit:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .chat-hint {
+      margin: 8px 2px 0;
+      color: var(--color-text-muted);
+      font-size: 12px;
+    }
+
+    .chat-empty {
+      margin-top: 24px;
+      padding: 28px;
+      border: 1px dashed var(--color-border-secondary);
+      border-radius: 10px;
+      color: var(--color-text-muted);
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .chat-turns {
+      list-style: none;
+      margin: 18px 0 0;
+      padding: 0;
+    }
+
+    .chat-turn + .chat-turn {
+      margin-top: 22px;
+      padding-top: 22px;
+      border-top: 1px solid var(--color-border-secondary);
+    }
+
+    .chat-turn-head {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chat-turn-question {
+      color: var(--color-text-title);
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .chat-turn-badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: lowercase;
+      background: var(--color-type-badge-bg);
+      color: var(--color-type-badge-text);
+    }
+
+    .chat-turn-badge.is-keyword {
+      background: var(--color-summary-badge-bg);
+      color: var(--color-summary-badge-text);
+    }
+
+    .chat-turn-note {
+      margin: 8px 0 0;
+      color: var(--color-text-secondary);
+      font-size: 13px;
+    }
+
+    .chat-turn-error {
+      margin: 8px 0 0;
+      color: var(--color-accent-error);
+      font-size: 13px;
+    }
+
+    .chat-walk {
+      list-style: none;
+      margin: 12px 0 0;
+      padding: 0 0 0 16px;
+      border-left: 2px solid var(--color-border-secondary);
+    }
+
+    .chat-step {
+      position: relative;
+      padding: 4px 0;
+      font-size: 13px;
+    }
+
+    .chat-step::before {
+      content: '';
+      position: absolute;
+      left: -21px;
+      top: 11px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-accent-primary);
+    }
+
+    .chat-step-label {
+      color: var(--color-text-primary);
+      font-weight: 600;
+      margin-right: 8px;
+    }
+
+    .chat-step-detail {
+      color: var(--color-text-secondary);
+    }
+
+    .chat-step-pending::before {
+      background: var(--color-skeleton-base);
+    }
+
+    .chat-skeleton {
+      display: block;
+      width: min(320px, 70%);
+      height: 12px;
+      border-radius: 6px;
+      background: linear-gradient(
+        90deg,
+        var(--color-skeleton-base) 25%,
+        var(--color-skeleton-highlight) 50%,
+        var(--color-skeleton-base) 75%
+      );
+      background-size: 200% 100%;
+      animation: chat-skeleton-shimmer 1.4s ease-in-out infinite;
+    }
+
+    @keyframes chat-skeleton-shimmer {
+      from { background-position: 200% 0; }
+      to { background-position: -200% 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chat-skeleton { animation: none; }
+    }
+
+    .chat-results {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 60px;
+        padding: 12px 8px;
+      }
+
+      .sidebar-brand-text,
+      .sidebar-nav-label,
+      .sidebar-nav-soon {
+        display: none;
+      }
+
+      .sidebar-brand {
+        justify-content: center;
+        padding: 4px 0 14px;
+      }
+
+      .sidebar-nav-item {
+        justify-content: center;
+        padding: 10px 0;
+      }
+
+      .sidebar-footer {
+        flex-direction: column;
+      }
+
+      .page {
+        padding: 20px 16px 40px;
+      }
+
+      .explorer-stepper-value {
+        min-width: 96px;
+        font-size: 12px;
+      }
+
+      .explorer-detail-panel {
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .stat-tiles {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .stat-tile-value {
+        font-size: 22px;
+      }
+
+      .chart-card {
+        padding: 14px 12px 10px;
       }
     }
   </style>

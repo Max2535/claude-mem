@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { TableNameRow } from '../../types/database.js';
-import { DATA_DIR, DB_PATH, ensureDir } from '../../shared/paths.js';
+import { DATA_DIR, DB_PATH, ensureDir, OBSERVER_SESSIONS_PROJECT } from '../../shared/paths.js';
 import { logger } from '../../utils/logger.js';
 import { isDirectChild } from '../../shared/path-utils.js';
 import { AppError } from '../server/ErrorHandler.js';
@@ -20,6 +20,15 @@ export class SessionSearch {
   private db: Database;
 
   private static readonly MISSING_SEARCH_INPUT_MESSAGE = 'Either query or filters required for search';
+
+  // Observation rows carry no platform_source of their own — it lives on the
+  // owning sdk_session. Callers that report per-source coverage read it off the
+  // result row, so every observation SELECT projects it here rather than
+  // leaving the field silently undefined. Same COALESCE as the filter clause
+  // above: a legacy row with a NULL/empty source counts as 'claude'.
+  private static platformSourceSelect(tableAlias: string): string {
+    return `COALESCE(NULLIF((SELECT s2.platform_source FROM sdk_sessions s2 WHERE s2.memory_session_id = ${tableAlias}.memory_session_id), ''), '${DEFAULT_PLATFORM_SOURCE}') AS platform_source`;
+  }
 
   constructor(dbPathOrDb: string | Database = DB_PATH) {
     if (dbPathOrDb instanceof Database) {
@@ -244,22 +253,91 @@ export class SessionSearch {
     }
   }
 
+  /**
+   * How many observations the filter matches per platform source, ignoring
+   * limit/offset. The vectorless walk indexes at most maxIndexRows and would
+   * otherwise report coverage against its own truncated index — "nothing
+   * found" and "nothing found in the slice that was read" would look the same.
+   *
+   * Deliberately a COUNT with no row payload: the same filters searchObservations
+   * uses, all seekable (project, epoch range, type), joined to sdk_sessions on
+   * its UNIQUE memory_session_id for the source label. It reads no observation
+   * columns, so it does not reintroduce the every-row read that getExplorerDay
+   * was fixed for, and it runs once per walk rather than once per row.
+   */
+  countObservationsBySource(options: SearchOptions = {}): Record<string, number> {
+    const params: any[] = [];
+    const {
+      limit: _limit,
+      offset: _offset,
+      orderBy: _orderBy,
+      allowUnfiltered = false,
+      excludeObserverSessions = false,
+      ...filters
+    } = options;
+
+    const userFilterClause = this.buildFilterClause(filters, params, 'o');
+    if (!userFilterClause && !allowUnfiltered) {
+      throw new AppError(SessionSearch.MISSING_SEARCH_INPUT_MESSAGE, 400, 'INVALID_SEARCH_REQUEST');
+    }
+
+    let filterClause = userFilterClause;
+    if (excludeObserverSessions) {
+      params.push(OBSERVER_SESSIONS_PROJECT);
+      filterClause = filterClause ? `${filterClause} AND o.project != ?` : 'o.project != ?';
+    }
+
+    const sql = `
+      SELECT COALESCE(NULLIF(s.platform_source, ''), '${DEFAULT_PLATFORM_SOURCE}') AS source, COUNT(*) AS total
+      FROM observations o
+      LEFT JOIN sdk_sessions s ON s.memory_session_id = o.memory_session_id
+      WHERE ${filterClause || '1=1'}
+      GROUP BY source
+    `;
+
+    const rows = this.db.prepare(sql).all(...params) as { source: string; total: number }[];
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      // Alias normalization can merge two raw values onto one source, so add
+      // rather than assign.
+      const source = normalizePlatformSource(row.source);
+      counts[source] = (counts[source] ?? 0) + row.total;
+    }
+    return counts;
+  }
+
   searchObservations(query: string | undefined, options: SearchOptions = {}): ObservationSearchResult[] {
     const params: any[] = [];
-    const { limit = 50, offset = 0, orderBy = 'relevance', ...filters } = options;
+    const {
+      limit = 50,
+      offset = 0,
+      orderBy = 'relevance',
+      allowUnfiltered = false,
+      excludeObserverSessions = false,
+      ...filters
+    } = options;
+
+    // Appended after the guard has already run on the caller's own filters, so
+    // excluding the observer project never counts as "this search is filtered".
+    const withObserverExclusion = (clause: string): string => {
+      if (!excludeObserverSessions) return clause;
+      params.push(OBSERVER_SESSIONS_PROJECT);
+      return clause ? `${clause} AND o.project != ?` : 'o.project != ?';
+    };
 
     if (!query) {
-      const filterClause = this.buildFilterClause(filters, params, 'o');
-      if (!filterClause) {
+      const userFilterClause = this.buildFilterClause(filters, params, 'o');
+      if (!userFilterClause && !allowUnfiltered) {
         throw new AppError(SessionSearch.MISSING_SEARCH_INPUT_MESSAGE, 400, 'INVALID_SEARCH_REQUEST');
       }
+      const filterClause = withObserverExclusion(userFilterClause);
 
       const orderClause = this.buildOrderClause(orderBy, false);
 
       const sql = `
-        SELECT o.*, o.discovery_tokens
+        SELECT o.*, o.discovery_tokens, ${SessionSearch.platformSourceSelect('o')}
         FROM observations o
-        WHERE ${filterClause}
+        WHERE ${filterClause || '1=1'}
         ${orderClause}
         LIMIT ? OFFSET ?
       `;
@@ -269,11 +347,11 @@ export class SessionSearch {
     }
 
     if (this._fts5Available) {
-      const filterClause = this.buildFilterClause(filters, params, 'o');
+      const filterClause = withObserverExclusion(this.buildFilterClause(filters, params, 'o'));
       const orderClause = this.buildOrderClause(orderBy, true, 'observations_fts');
 
       const sql = `
-        SELECT o.*, o.discovery_tokens
+        SELECT o.*, o.discovery_tokens, ${SessionSearch.platformSourceSelect('o')}
         FROM observations o
         JOIN observations_fts ON observations_fts.rowid = o.id
         WHERE observations_fts MATCH ?
@@ -372,7 +450,7 @@ export class SessionSearch {
     const orderClause = this.buildOrderClause(orderBy, false);
 
     const sql = `
-      SELECT o.*, o.discovery_tokens
+      SELECT o.*, o.discovery_tokens, ${SessionSearch.platformSourceSelect('o')}
       FROM observations o
       WHERE ${filterClause}
       ${orderClause}
@@ -432,7 +510,7 @@ export class SessionSearch {
     const orderClause = this.buildOrderClause(orderBy, false);
 
     const observationsSql = `
-      SELECT o.*, o.discovery_tokens
+      SELECT o.*, o.discovery_tokens, ${SessionSearch.platformSourceSelect('o')}
       FROM observations o
       WHERE ${filterClause}
       ${orderClause}
@@ -515,7 +593,7 @@ export class SessionSearch {
     const orderClause = this.buildOrderClause(orderBy, false);
 
     const sql = `
-      SELECT o.*, o.discovery_tokens
+      SELECT o.*, o.discovery_tokens, ${SessionSearch.platformSourceSelect('o')}
       FROM observations o
       WHERE ${filterClause}
       ${orderClause}

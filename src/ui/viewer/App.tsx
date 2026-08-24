@@ -1,14 +1,26 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { Dashboard } from './components/Dashboard';
+import { ComingSoon } from './components/ComingSoon';
 import { Feed } from './components/Feed';
+import { Explorer } from './components/Explorer';
+import { Chat } from './components/Chat';
+import { TokenBurn } from './components/TokenBurn';
+import { System } from './components/System';
 import { ContextSettingsModal } from './components/ContextSettingsModal';
 import { LogsDrawer } from './components/LogsModal';
 import { WelcomeCard, getStoredWelcomeDismissed, setStoredWelcomeDismissed } from './components/WelcomeCard';
 import { useSSE } from './hooks/useSSE';
+import { AgentFlow } from './components/AgentFlow';
 import { useSettings } from './hooks/useSettings';
 import { usePagination } from './hooks/usePagination';
 import { useTheme } from './hooks/useTheme';
+import { useRoute } from './hooks/useRoute';
+import { useStats } from './hooks/useStats';
+import { NAV_ITEMS } from './constants/nav';
 import { Observation, Summary, UserPrompt } from './types';
+import { ChatTurn } from './utils/memoryWalk';
 import { mergeAndDeduplicateByProject } from './utils/data';
 
 export function App() {
@@ -19,11 +31,16 @@ export function App() {
   const [paginatedObservations, setPaginatedObservations] = useState<Observation[]>([]);
   const [paginatedSummaries, setPaginatedSummaries] = useState<Summary[]>([]);
   const [paginatedPrompts, setPaginatedPrompts] = useState<UserPrompt[]>([]);
+  // Held here rather than inside Chat: a route change unmounts the screen, and
+  // an answer that cost an LLM subprocess should not vanish with it.
+  const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
 
-  const { observations, summaries, prompts, projects, isProcessing, queueDepth } = useSSE();
+  const { observations, summaries, prompts, projects, isProcessing, queueDepth, flowEvents } = useSSE();
   const { settings, saveSettings, isSaving, saveStatus } = useSettings();
   const { preference, setThemePreference } = useTheme();
   const pagination = usePagination(currentFilter);
+  const [route, routeTail, navigate] = useRoute();
+  const { stats, error: statsError } = useStats();
 
   const matchesSelection = useCallback((item: { project: string }) => {
     return !currentFilter || item.project === currentFilter;
@@ -91,31 +108,96 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFilter]);
 
+  const currentNavItem = NAV_ITEMS.find(item => item.id === route) ?? NAV_ITEMS[0];
+
   return (
     <>
-      <Header
-        projects={projects}
-        currentFilter={currentFilter}
-        onFilterChange={setCurrentFilter}
-        isProcessing={isProcessing}
-        queueDepth={queueDepth}
-        themePreference={preference}
-        onThemeChange={setThemePreference}
-        onContextPreviewToggle={toggleContextPreview}
-        onShowHelp={() => {
-          setStoredWelcomeDismissed(false);
-          setWelcomeDismissed(false);
-        }}
-      />
+      <div className="app-shell">
+        <Sidebar
+          route={route}
+          onNavigate={navigate}
+          isProcessing={isProcessing}
+          queueDepth={queueDepth}
+          themePreference={preference}
+          onThemeChange={setThemePreference}
+          onSettingsToggle={toggleContextPreview}
+          onLogsToggle={toggleLogsModal}
+          logsOpen={logsModalOpen}
+        />
 
-      <Feed
-        observations={allObservations}
-        summaries={allSummaries}
-        prompts={allPrompts}
-        onLoadMore={handleLoadMore}
-        isLoading={pagination.observations.isLoading || pagination.summaries.isLoading || pagination.prompts.isLoading}
-        hasMore={pagination.observations.hasMore || pagination.summaries.hasMore || pagination.prompts.hasMore}
-      />
+        <div className="app-main">
+          <Header
+            projects={projects}
+            currentFilter={currentFilter}
+            onFilterChange={setCurrentFilter}
+            onShowHelp={() => {
+              setStoredWelcomeDismissed(false);
+              setWelcomeDismissed(false);
+            }}
+          />
+
+          {route === 'home' && (
+            <Dashboard
+              stats={stats}
+              statsError={statsError}
+              observations={allObservations}
+              summaries={allSummaries}
+              prompts={allPrompts}
+              currentFilter={currentFilter}
+              onNavigate={navigate}
+            />
+          )}
+
+          {route === 'recall' && (
+            <Feed
+              observations={allObservations}
+              summaries={allSummaries}
+              prompts={allPrompts}
+              onLoadMore={handleLoadMore}
+              isLoading={pagination.observations.isLoading || pagination.summaries.isLoading || pagination.prompts.isLoading}
+              hasMore={pagination.observations.hasMore || pagination.summaries.hasMore || pagination.prompts.hasMore}
+            />
+          )}
+
+          {route === 'explorer' && (
+            <Explorer
+              currentFilter={currentFilter}
+              liveObservationCount={observations.length}
+              selectedId={routeTail}
+              onSelect={id => navigate('explorer', id)}
+            />
+          )}
+
+          {route === 'burn' && <TokenBurn currentFilter={currentFilter} />}
+
+          {route === 'flow' && (
+            <AgentFlow
+              flowEvents={flowEvents}
+              currentFilter={currentFilter}
+              isProcessing={isProcessing}
+              queueDepth={queueDepth}
+            />
+          )}
+      {route === 'chat' && (
+            <Chat
+              currentFilter={currentFilter}
+              turns={chatTurns}
+              setTurns={setChatTurns}
+            />
+          )}
+
+          {route === 'system' && (
+            <System
+              stats={stats}
+              statsError={statsError}
+              isProcessing={isProcessing}
+              queueDepth={queueDepth}
+            />
+          )}
+
+          {!currentNavItem.built && <ComingSoon item={currentNavItem} />}
+        </div>
+      </div>
 
       {!welcomeDismissed && (
         <WelcomeCard onDismiss={() => setWelcomeDismissed(true)} />
@@ -129,17 +211,6 @@ export function App() {
         isSaving={isSaving}
         saveStatus={saveStatus}
       />
-
-      <button
-        className="console-toggle-btn"
-        onClick={toggleLogsModal}
-        title="Toggle Console"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="4 17 10 11 4 5"></polyline>
-          <line x1="12" y1="19" x2="20" y2="19"></line>
-        </svg>
-      </button>
 
       <LogsDrawer
         isOpen={logsModalOpen}

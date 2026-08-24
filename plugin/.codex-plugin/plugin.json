@@ -1,5 +1,5 @@
 {
-  "name": "claude-mem",
+  "name": "claude-mem-pro-max",
   "version": "13.15.3",
   "description": "Memory compression system for Claude Code - persist context across sessions",
   "author": {

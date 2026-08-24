@@ -1,0 +1,165 @@
+import { describe, it, expect } from 'bun:test';
+import {
+  describeWalk,
+  plural,
+  readKeywordResponse,
+  readWalkResponse,
+  unmatchedSources,
+} from '../../src/ui/viewer/utils/memoryWalk.js';
+import type { MemoryWalkTraversal } from '../../src/ui/viewer/types.js';
+
+describe('readWalkResponse', () => {
+  it('reads the disabled 409 and repeats what the server said', () => {
+    // The disabled endpoint answers 409; the note still comes from the body,
+    // not from a paraphrase this screen invented.
+    const outcome = readWalkResponse(false, 409, {
+      error: 'Vectorless retrieval is disabled',
+      hint: 'Set CLAUDE_MEM_VECTORLESS_ENABLED=true in ~/.claude-mem/settings.json and restart the worker',
+    });
+    expect(outcome.kind).toBe('fallback');
+    if (outcome.kind !== 'fallback') return;
+    expect(outcome.note).toContain('Vectorless retrieval is disabled');
+    expect(outcome.note).toContain('CLAUDE_MEM_VECTORLESS_ENABLED=true');
+  });
+
+  it('falls back with the status when the failure carried no explanation', () => {
+    const outcome = readWalkResponse(false, 500, null);
+    expect(outcome.kind).toBe('fallback');
+    if (outcome.kind !== 'fallback') return;
+    expect(outcome.note).toContain('500');
+  });
+
+  it('falls back with no note when the body is unreadable', () => {
+    const outcome = readWalkResponse(true, 200, null);
+    expect(outcome).toEqual({ kind: 'fallback', note: undefined });
+  });
+
+  it('reports a walk when the body carries one', () => {
+    const traversal: MemoryWalkTraversal = { rounds: 2, daysWalked: ['2026-07-14'], sessionsWalked: ['s1'], indexRows: 80 };
+    const outcome = readWalkResponse(true, 200, {
+      observations: [{ id: 1 } as never],
+      traversal,
+      coverage: { indexed: { claude: 80 }, matched: { claude: 1 } },
+      strategy: 'vectorless',
+    });
+    expect(outcome.kind).toBe('walk');
+    if (outcome.kind !== 'walk') return;
+    expect(outcome.observations).toHaveLength(1);
+    expect(outcome.traversal).toEqual(traversal);
+  });
+
+  it('treats a walk that matched nothing as a walk, not a fallback', () => {
+    // `strategy` is not optional in practice: SearchManager.temporalSearch puts
+    // the strategy that answered on every response. Leaving it off here made
+    // the fixture describe a reply the server never sends.
+    const outcome = readWalkResponse(true, 200, {
+      observations: [],
+      traversal: { rounds: 1, daysWalked: [], sessionsWalked: [], indexRows: 0 },
+      strategy: 'vectorless',
+    });
+    expect(outcome.kind).toBe('walk');
+  });
+
+  // SearchOrchestrator.ts:66 answers a failed walk with plain SQLite results —
+  // HTTP 200, no error field, no traversal. Read as a walk, the Chat screen
+  // credits keyword hits to an index walk that never ran.
+  it('treats a sqlite answer as a fallback even though nothing failed visibly', () => {
+    const outcome = readWalkResponse(true, 200, {
+      observations: [{ id: 1 } as never],
+      strategy: 'sqlite',
+    });
+
+    expect(outcome.kind).toBe('fallback');
+    if (outcome.kind !== 'fallback') return;
+    expect(outcome.note).toContain('sqlite');
+  });
+
+  it('names whichever strategy answered, not just sqlite', () => {
+    const outcome = readWalkResponse(true, 200, { observations: [], strategy: 'chroma' });
+
+    expect(outcome.kind).toBe('fallback');
+    if (outcome.kind !== 'fallback') return;
+    expect(outcome.note).toContain('chroma');
+  });
+
+  it('does not call it a walk when the server named no strategy at all', () => {
+    const outcome = readWalkResponse(true, 200, { observations: [{ id: 1 } as never] });
+
+    expect(outcome.kind).toBe('fallback');
+  });
+});
+
+describe('readKeywordResponse', () => {
+  it('counts what it drops so the screen can say so', () => {
+    const { observations, omitted } = readKeywordResponse({
+      observations: [{ id: 1 } as never, { id: 2 } as never],
+      sessions: [{} as never],
+      prompts: [{} as never, {} as never],
+      totalResults: 5,
+    });
+    expect(observations).toHaveLength(2);
+    expect(omitted).toEqual({ sessions: 1, prompts: 2 });
+  });
+
+  it('survives a body missing every array', () => {
+    expect(readKeywordResponse(null)).toEqual({ observations: [], omitted: { sessions: 0, prompts: 0 } });
+  });
+});
+
+describe('describeWalk', () => {
+  it('says plainly that no day narrowing ran when rounds is 1', () => {
+    const steps = describeWalk({ rounds: 1, daysWalked: ['a', 'b'], sessionsWalked: ['s'], indexRows: 81 }, 6);
+    expect(steps.map(s => s.label)).toEqual(['Built the index', 'Skipped day narrowing', 'Picked the answers']);
+    expect(steps[1].detail).toContain('2 days');
+    expect(steps[0].detail).toContain('81 observations');
+    expect(steps[2].detail).toContain('6 observations');
+  });
+
+  it('reports the days it kept when a second round ran', () => {
+    const steps = describeWalk({ rounds: 2, daysWalked: ['2026-07-14'], sessionsWalked: ['s'], indexRows: 500 }, 1);
+    expect(steps[1].label).toBe('Narrowed to days');
+    expect(steps[1].detail).toContain('2026-07-14');
+    // One of each: the singular must not read "1 observations".
+    expect(steps[2].detail).toBe('1 observation across 1 session.');
+  });
+
+  // Without the denominator the first step reads as "this is what there was",
+  // which on a capped index is the silent-truncation bug the number exists for.
+  it('says what the index was cut from when the cap truncated it', () => {
+    const steps = describeWalk(
+      { rounds: 1, daysWalked: ['a'], sessionsWalked: ['s'], indexRows: 500 },
+      3,
+      { indexed: { claude: 500 }, matched: { claude: 3 }, total: { claude: 6000, codex: 92 }, truncated: { claude: true, codex: true } }
+    );
+    expect(steps[0].detail).toContain('6092 observations');
+    expect(steps[0].detail).toContain('never looked at');
+  });
+
+  it('stays quiet about truncation when the index holds the whole filtered set', () => {
+    const steps = describeWalk(
+      { rounds: 1, daysWalked: ['a'], sessionsWalked: ['s'], indexRows: 81 },
+      3,
+      { indexed: { claude: 81 }, matched: { claude: 3 }, total: { claude: 81 }, truncated: { claude: false } }
+    );
+    expect(steps[0].detail).not.toContain('never looked at');
+  });
+});
+
+describe('unmatchedSources', () => {
+  it('names a source that was indexed but never picked', () => {
+    expect(unmatchedSources({ indexed: { claude: 40, codex: 3 }, matched: { claude: 2 } })).toEqual(['codex']);
+  });
+
+  it('is empty when every indexed source matched', () => {
+    expect(unmatchedSources({ indexed: { claude: 40 }, matched: { claude: 2 } })).toEqual([]);
+  });
+});
+
+describe('plural', () => {
+  it('drops the s at one and takes an irregular plural when given one', () => {
+    expect(plural(1, 'observation')).toBe('1 observation');
+    expect(plural(2, 'observation')).toBe('2 observations');
+    expect(plural(1, 'session summary', 'session summaries')).toBe('1 session summary');
+    expect(plural(3, 'session summary', 'session summaries')).toBe('3 session summaries');
+  });
+});

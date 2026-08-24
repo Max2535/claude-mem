@@ -4,6 +4,7 @@ import { homedir } from 'os';
 import { existsSync, unlinkSync } from 'fs';
 import { Database } from 'bun:sqlite';
 import { DB_PATH } from '../../shared/paths.js';
+import { withHookFailureWarning } from '../../shared/hook-breadcrumb.js';
 import { logger } from '../../utils/logger.js';
 import { getProjectContext } from '../../utils/project-name.js';
 import { normalizePlatformSource } from '../../shared/platform-source.js';
@@ -174,12 +175,24 @@ function buildInjectStats(
 }
 
 /**
- * Prepend the observer-health outage warning when the observer is failing.
+ * Prepend every startup-health warning the user needs to see.
+ *
  * Applied to EVERY context path (including empty-state, missing-DB, and the
- * no-memories-yet welcome hint in SearchRoutes) so the outage is surfaced even
+ * no-memories-yet welcome hint in SearchRoutes) so an outage is surfaced even
  * when there is nothing else to render.
+ *
+ * Two warnings stack here, hook failures first because they are the more
+ * severe: a failing observer still records the session, whereas a hook that
+ * could not resolve the plugin root recorded nothing at all. Reading is
+ * non-destructive — the inject route clears the breadcrumb once the response
+ * carrying this warning has been sent.
  */
-export function withObserverHealthWarning(text: string): string {
+export function withStartupWarnings(text: string): string {
+  return withHookFailureWarning(withObserverHealthWarning(text));
+}
+
+/** Observer-outage half of {@link withStartupWarnings}. */
+function withObserverHealthWarning(text: string): string {
   const health = readObserverHealth();
   if (!isObserverUnhealthy(health)) {
     return text;
@@ -206,7 +219,7 @@ export async function generateContextWithStats(
 
   const rawDb = initializeDatabase();
   if (!rawDb) {
-    return { text: withObserverHealthWarning(''), stats: null };
+    return { text: withStartupWarnings(''), stats: null };
   }
 
   try {
@@ -219,7 +232,7 @@ export async function generateContextWithStats(
     const summaries = querySummariesMulti(db, queryProjects, config, platformSource);
 
     if (observations.length === 0 && summaries.length === 0) {
-      return { text: withObserverHealthWarning(renderEmptyState(project, forHuman)), stats: null };
+      return { text: withStartupWarnings(renderEmptyState(project, forHuman)), stats: null };
     }
 
     const output = buildContextOutput(
@@ -233,7 +246,7 @@ export async function generateContextWithStats(
     );
 
     return {
-      text: withObserverHealthWarning(output),
+      text: withStartupWarnings(output),
       stats: buildInjectStats(observations, summaries, Boolean(input?.full)),
     };
   } finally {

@@ -7,16 +7,17 @@ import { SearchManager } from '../../SearchManager.js';
 import type { SearchTelemetryEnvelope } from '../../SearchManager.js';
 import { BaseRouteHandler } from '../BaseRouteHandler.js';
 import { validateBody } from '../middleware/validateBody.js';
+import { rejectCrossOriginSubprocessRoutes } from '../middleware.js';
 import { logger } from '../../../../utils/logger.js';
 import { groupByDate } from '../../../../shared/timeline-formatting.js';
 import { countObservationsByProjects } from '../../../context/ObservationCompiler.js';
-import { withObserverHealthWarning } from '../../../context/ContextBuilder.js';
+import { withStartupWarnings } from '../../../context/ContextBuilder.js';
+import { clearHookFailures } from '../../../../shared/hook-breadcrumb.js';
 import { SettingsDefaultsManager } from '../../../../shared/SettingsDefaultsManager.js';
 import { USER_SETTINGS_PATH } from '../../../../shared/paths.js';
 import type { ObservationSearchResult, SessionSummarySearchResult } from '../../../sqlite/types.js';
 import { captureEvent } from '../../../telemetry/telemetry.js';
 import { telemetryBuffer } from '../../../telemetry/buffer.js';
-import { proTrialLine } from '../../../../shared/pro-promo.js';
 
 const ONBOARDING_EXPLAINER_PATH: string = path.resolve(__dirname, '../skills/how-it-works/onboarding-explainer.md');
 
@@ -53,7 +54,6 @@ Memory injection starts on your second session in a project.
 \`/learn-codebase\` is available if the user wants to front-load the entire repo into memory in a single pass (~5 minutes on a typical repo, optional). Otherwise memory builds passively as work happens.
 
 Live activity: {viewer_url}
-{pro_trial_line}
 How it works: \`/how-it-works\`
 
 This message disappears once the first observation lands.
@@ -119,7 +119,7 @@ export class SearchRoutes extends BaseRouteHandler {
     // endpoint name (OUR route segment, bounded to a known enum), outcome, and
     // latency — never query text (see docs/public/telemetry.mdx).
     const KNOWN_SEARCH_ENDPOINTS = new Set([
-      'unified', 'observations', 'by-file',
+      'unified', 'observations', 'by-file', 'temporal',
     ]);
     app.use('/api/search', (req: Request, res: Response, next: express.NextFunction) => {
       const searchStartedAt = Date.now();
@@ -148,6 +148,11 @@ export class SearchRoutes extends BaseRouteHandler {
 
     app.get('/api/search/observations', this.handleSearchObservations.bind(this));
     app.get('/api/search/by-file', this.handleSearchByFile.bind(this));
+    // The only route here that spawns a subprocess per request, so the only one
+    // that needs the cross-origin gate (middleware.ts). It sits in front of the
+    // handler rather than on the whole /api/search prefix: the other search
+    // endpoints are plain SQLite reads and the viewer is not the only caller.
+    app.get('/api/search/temporal', rejectCrossOriginSubprocessRoutes, this.handleTemporalSearch.bind(this));
 
     app.get('/api/context/recent', this.handleGetRecentContext.bind(this));
     app.get('/api/context/preview', this.handleContextPreview.bind(this));
@@ -177,6 +182,16 @@ export class SearchRoutes extends BaseRouteHandler {
   private handleSearchObservations = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
     const result = await this.searchManager.searchObservations(this.queryWithPlatformSource(req));
     res.json(result);
+  });
+
+  private handleTemporalSearch = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
+    const result = await this.searchManager.temporalSearch(this.queryWithPlatformSource(req));
+    // 409, not 200: the endpoint exists but the walk cannot run in this
+    // configuration. The body is unchanged — only the status stops lying, so a
+    // client can trust response.ok instead of parsing an error field out of a
+    // success. A walk that RAN and fell back still answers 200; the client
+    // tells those apart by the strategy the server names.
+    res.status(result?.error ? 409 : 200).json(result);
   });
 
   private handleSearchByFile = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {
@@ -315,13 +330,12 @@ export class SearchRoutes extends BaseRouteHandler {
         const port = process.env.CLAUDE_MEM_WORKER_PORT ?? settings.CLAUDE_MEM_WORKER_PORT;
         const viewerUrl = `http://localhost:${port}`;
         const hintBody = WELCOME_HINT_TEMPLATE
-          .replace('{viewer_url}', viewerUrl)
-          .replace('{pro_trial_line}', proTrialLine('welcome-hint'));
+          .replace('{viewer_url}', viewerUrl);
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         // A project with zero observations is exactly where a failing observer
         // hides: without this the health warning (applied inside
         // generateContextWithStats) never reached the user this early-return serves.
-        res.send(withObserverHealthWarning(hintBody));
+        res.send(withStartupWarnings(hintBody));
         return;
       }
     }
@@ -377,8 +391,19 @@ export class SearchRoutes extends BaseRouteHandler {
       });
     }
 
+    // Size only — the injected text itself never reaches Agent Flow. Read by
+    // the agentFlowHook middleware on response finish.
+    (res.locals as { agentFlowDetail?: string }).agentFlowDetail =
+      `context \u00b7 ${contextResult.text.length} chars`;
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(contextResult.text);
+
+    // Consume the breadcrumb only here, and only after the response carrying
+    // the warning has gone out. Every other surface that renders the warning
+    // (the viewer, --full) leaves the file alone, so SessionStart — the one
+    // place the user reliably reads it — is never beaten to it.
+    clearHookFailures();
   });
 
   private handleSemanticContext = this.wrapHandler(async (req: Request, res: Response): Promise<void> => {

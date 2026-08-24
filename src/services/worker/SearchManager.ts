@@ -7,6 +7,7 @@ import { TimelineService } from './TimelineService.js';
 import type { TimelineItem } from './TimelineService.js';
 import type { ObservationSearchResult, SessionSummarySearchResult, UserPromptSearchResult } from '../sqlite/types.js';
 import { logger } from '../../utils/logger.js';
+import { randomUUID } from 'crypto';
 import { getProjectContext } from '../../utils/project-name.js';
 import { normalizePlatformSource } from '../../shared/platform-source.js';
 import { formatDate, formatTime, formatDateTime, extractFirstFile, groupByDate, estimateTokens } from '../../shared/timeline-formatting.js';
@@ -18,6 +19,11 @@ import {
 } from './search/index.js';
 import { ResultFormatter } from './search/ResultFormatter.js';
 import { ChromaUnavailableError } from './search/errors.js';
+import { VectorlessSearchStrategy, type VectorlessConfig } from './search/strategies/VectorlessSearchStrategy.js';
+import type { LlmFn } from './search/vectorless/TraversalAgent.js';
+import { createVectorlessLlmRunner, productionVectorlessLlmDeps } from './search/vectorless/llm-runner.js';
+import { SettingsDefaultsManager, type SettingsDefaults } from '../../shared/SettingsDefaultsManager.js';
+import { USER_SETTINGS_PATH } from '../../shared/paths.js';
 
 /**
  * Telemetry envelope for search_performed (see docs/public/telemetry.mdx).
@@ -32,21 +38,133 @@ export interface SearchTelemetryEnvelope {
   fallback_reason?: 'none' | 'chroma_connection' | 'chroma_error' | 'chroma_not_initialized';
 }
 
+/** Returns null when vectorless retrieval is off — the caller then wires no strategy at all. */
+export function buildVectorlessConfig(settings: SettingsDefaults): VectorlessConfig | null {
+  if (settings.CLAUDE_MEM_VECTORLESS_ENABLED !== 'true') return null;
+  const parse = (value: string, fallback: number): number => {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    maxIndexRows: parse(settings.CLAUDE_MEM_VECTORLESS_MAX_INDEX_ROWS, 500),
+    maxDays: parse(settings.CLAUDE_MEM_VECTORLESS_MAX_DAYS, 14),
+  };
+}
+
+/**
+ * Pagination numbers off an HTTP query string or an MCP tool call, which are
+ * whatever the caller typed. `parseInt('abc')` is NaN, and NaN travels all the
+ * way to `LIMIT ?` — the search then comes back empty, which reads as "you have
+ * no memories about this" rather than "that limit was not a number". Anything
+ * unusable becomes undefined so the caller's own default takes over.
+ */
+export function parseBoundedInt(value: unknown, min: number): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed < min) return undefined;
+  return Math.floor(parsed);
+}
+
+/** Comma-separated query params arrive as one string; SQL wants the list. */
+function splitCsv(value: string): string[] {
+  return value.split(',').map(part => part.trim()).filter(Boolean);
+}
+
 export class SearchManager {
   private orchestrator: SearchOrchestrator;
+  private vectorlessStrategy: VectorlessSearchStrategy | null;
 
+  /**
+   * `deps` exists for the same reason createVectorlessLlmRunner(deps) does:
+   * everything below the traversal call is ordinary logic, and hardcoding the
+   * runner here put temporalSearch behind a real subprocess. Production passes
+   * nothing and gets the production runner and the user's settings.
+   */
   constructor(
     private sessionSearch: SessionSearch,
     private sessionStore: SessionStore,
     private chromaSync: ChromaSync | null,
     private formatter: FormattingService,
-    private timelineService: TimelineService
+    private timelineService: TimelineService,
+    deps: { vectorlessLlm?: LlmFn; vectorlessConfig?: VectorlessConfig | null } = {}
   ) {
+    const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+    const vectorlessConfig = deps.vectorlessConfig !== undefined
+      ? deps.vectorlessConfig
+      : buildVectorlessConfig(settings);
+    // The runner is built here rather than imported as a module singleton so
+    // its usage hook can reach this store. Project stays null: the runner is
+    // constructed once, while project is a per-query argument — vectorless
+    // spend is therefore reported as unattributed rather than misattributed.
+    const vectorlessLlm = deps.vectorlessLlm ?? createVectorlessLlmRunner({
+      ...productionVectorlessLlmDeps,
+      recordUsage: usage => {
+        try {
+          sessionStore.recordTokenUsage({
+            // Each traversal is a fresh stateless SDK session with no resume,
+            // so the result's cumulative total_cost_usd IS this call's cost —
+            // no delta against a prior baseline to compute.
+            eventKey: `plugin:vectorless:${usage.uuid ?? randomUUID()}`,
+            source: 'plugin',
+            component: 'vectorless',
+            project: null,
+            model: usage.model,
+            inputTokens: usage.inputTokens,
+            cacheCreationTokens: usage.cacheCreationTokens,
+            cacheReadTokens: usage.cacheReadTokens,
+            outputTokens: usage.outputTokens,
+            costUsd: usage.costUsd,
+            epoch: Date.now(),
+          });
+        } catch (error) {
+          logger.warn('SEARCH', 'Vectorless token usage not recorded — continuing', {},
+            error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+    });
+    this.vectorlessStrategy = vectorlessConfig
+      ? new VectorlessSearchStrategy(sessionSearch, vectorlessLlm, vectorlessConfig)
+      : null;
     this.orchestrator = new SearchOrchestrator(
       sessionSearch,
       sessionStore,
-      chromaSync
+      chromaSync,
+      this.vectorlessStrategy
     );
+  }
+
+  /**
+   * The body a caller gets when vectorless retrieval is switched off. The route
+   * answers it with 409 rather than 200: a walk that could not run is not a
+   * success, and a client that has to inspect the body to find that out cannot
+   * trust response.ok for anything.
+   */
+  static readonly VECTORLESS_DISABLED_RESPONSE = {
+    error: 'Vectorless retrieval is disabled',
+    hint: 'Set CLAUDE_MEM_VECTORLESS_ENABLED=true in ~/.claude-mem/settings.json and restart the worker',
+  } as const;
+
+  async temporalSearch(args: any): Promise<any> {
+    if (!this.vectorlessStrategy) {
+      return { ...SearchManager.VECTORLESS_DISABLED_RESPONSE };
+    }
+    const dateRange = (args.dateStart || args.dateEnd)
+      ? { start: args.dateStart, end: args.dateEnd }
+      : undefined;
+    const result = await this.orchestrator.search({
+      query: args.query,
+      limit: parseBoundedInt(args.limit, 1),
+      project: args.project,
+      platformSource: args.platformSource,
+      dateRange,
+      strategyHint: 'vectorless',
+    });
+    return {
+      observations: result.results.observations,
+      coverage: result.coverage,
+      traversal: result.traversal,
+      strategy: result.strategy,
+    };
   }
 
   getOrchestrator(): SearchOrchestrator {
@@ -245,66 +363,88 @@ export class SearchManager {
     return lines;
   }
 
+  /**
+   * Search options that are ours to set, never the caller's. Both of them widen
+   * a search rather than narrow it, and normalizeParams' output is spread
+   * straight into SessionSearch.searchObservations — so they are declared here
+   * as literals and are unreachable from any caller-supplied object. Only the
+   * vectorless index walk turns them on, and it builds its own options object.
+   */
+  private static readonly INTERNAL_SEARCH_OPTIONS = {
+    allowUnfiltered: false,
+    excludeObserverSessions: false,
+  } as const;
+
+  /**
+   * Build the search options from named caller args, field by field.
+   *
+   * Every arg on this path is caller-supplied — HTTP query params off
+   * SearchRoutes, or MCP tool input — and the result is spread into SQL option
+   * objects. A denylist would have to grow a new `delete` line every time an
+   * internal option is added, and the one that gets forgotten is wire-reachable
+   * from the day it lands. So this copies out the fields a caller may set and
+   * nothing else: an unknown key cannot survive, whatever it is called.
+   */
   private normalizeParams(args: any): any {
-    const normalized: any = { ...args };
+    const raw: Record<string, any> = (args && typeof args === 'object') ? args : {};
+    const normalized: Record<string, any> = { ...SearchManager.INTERNAL_SEARCH_OPTIONS };
 
-    if (normalized.filePath && !normalized.files) {
-      normalized.files = normalized.filePath;
-      delete normalized.filePath;
-    }
+    const set = (key: string, value: any): void => {
+      if (value !== undefined) normalized[key] = value;
+    };
 
-    if (normalized.concept && !normalized.concepts) {
-      normalized.concepts = normalized.concept;
-      delete normalized.concept;
-    }
+    // Plain passthrough fields.
+    set('query', raw.query);
+    set('project', raw.project);
+    set('format', raw.format);
+    set('orderBy', raw.orderBy);
+    // Timeline params: timeline() and getTimelineByQuery() read these off the
+    // same normalized object.
+    set('anchor', raw.anchor);
+    set('depth_before', raw.depth_before);
+    set('depth_after', raw.depth_after);
+    set('mode', raw.mode);
 
-    if (normalized.concepts && typeof normalized.concepts === 'string') {
-      normalized.concepts = normalized.concepts.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
+    // `filePath` and `concept` are the singular aliases the HTTP layer accepts;
+    // the plural form wins when both are present.
+    const files = raw.files ?? raw.filePath;
+    const concepts = raw.concepts ?? raw.concept;
+    set('files', typeof files === 'string' ? splitCsv(files) : files);
+    set('concepts', typeof concepts === 'string' ? splitCsv(concepts) : concepts);
+    set('obs_type', typeof raw.obs_type === 'string' ? splitCsv(raw.obs_type) : raw.obs_type);
+    set(
+      'type',
+      typeof raw.type === 'string' && raw.type.includes(',') ? splitCsv(raw.type) : raw.type
+    );
 
-    if (normalized.files && typeof normalized.files === 'string') {
-      normalized.files = normalized.files.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-
-    if (normalized.obs_type && typeof normalized.obs_type === 'string') {
-      normalized.obs_type = normalized.obs_type.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-
-    if (normalized.type && typeof normalized.type === 'string' && normalized.type.includes(',')) {
-      normalized.type = normalized.type.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-
-    const dateStart = normalized.dateStart ?? normalized.date_start ?? normalized.date_from;
-    const dateEnd = normalized.dateEnd ?? normalized.date_end ?? normalized.date_to;
+    const dateStart = raw.dateStart ?? raw.date_start ?? raw.date_from;
+    const dateEnd = raw.dateEnd ?? raw.date_end ?? raw.date_to;
     if (dateStart || dateEnd) {
-      normalized.dateRange = {
-        start: dateStart,
-        end: dateEnd
-      };
+      normalized.dateRange = { start: dateStart, end: dateEnd };
+    } else {
+      set('dateRange', raw.dateRange);
     }
-    delete normalized.dateStart;
-    delete normalized.dateEnd;
-    delete normalized.date_start;
-    delete normalized.date_end;
-    delete normalized.date_from;
-    delete normalized.date_to;
 
-    if (normalized.isFolder === 'true') {
+    // Same reasoning as parseBoundedInt's doc: these arrive as strings and
+    // would otherwise reach `LIMIT ?` as NaN.
+    if ('limit' in raw) set('limit', parseBoundedInt(raw.limit, 1));
+    if ('offset' in raw) set('offset', parseBoundedInt(raw.offset, 0));
+
+    if (raw.isFolder === 'true') {
       normalized.isFolder = true;
-    } else if (normalized.isFolder === 'false') {
+    } else if (raw.isFolder === 'false') {
       normalized.isFolder = false;
+    } else {
+      set('isFolder', raw.isFolder);
     }
 
     // Source-scoping (#2389): normalize the platform_source filter so that a
     // codex/cursor/etc. agent only sees its own memory. Accept both the
     // camelCase API param and the snake_case column name for robustness.
-    const rawPlatformSource = normalized.platformSource ?? normalized.platform_source;
+    const rawPlatformSource = raw.platformSource ?? raw.platform_source;
     if (typeof rawPlatformSource === 'string' && rawPlatformSource.trim()) {
       normalized.platformSource = normalizePlatformSource(rawPlatformSource);
-    } else {
-      delete normalized.platformSource;
     }
-    delete normalized.platform_source;
 
     return normalized;
   }

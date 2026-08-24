@@ -12,7 +12,7 @@ import {
   UserPromptRecord,
   LatestPromptResult
 } from '../../types/database.js';
-import type { ObservationSearchResult, SessionSummarySearchResult } from './types.js';
+import type { ObservationSearchResult, SessionSummarySearchResult, TokenUsageEvent, TranscriptReadState } from './types.js';
 import { computeObservationContentHash } from './observations/store.js';
 import { DEFAULT_PLATFORM_SOURCE, normalizePlatformSource, sortPlatformSources } from '../../shared/platform-source.js';
 import { findRecentDuplicateUserPrompt as findRecentDuplicateUserPromptRecord } from './prompts/get.js';
@@ -120,6 +120,7 @@ export class SessionStore {
     this.ensureSyncRevisionTextAffinity();
     this.initializeSyncHubLaunchBaseline();
     this.normalizeConceptTags();
+    this.ensureTokenUsageTables();
   }
 
   private getIndexColumns(indexName: string): string[] {
@@ -883,6 +884,69 @@ export class SessionStore {
     });
     tx();
     logger.debug('DB', `Normalized prefixed concept tags in ${changedCount} observations (v49)`);
+  }
+
+  /**
+   * Token accounting (version 50). Two tables, both additive.
+   *
+   * `token_usage_events` is one row per billing-relevant model call, written
+   * by two independent capture paths: the SDK `result` message inside the
+   * providers (claude-mem's own spend) and the Claude Code transcript tailer
+   * (the operator's own sessions). `event_key` is UNIQUE because both paths
+   * can legitimately deliver the same call twice — the transcript fans one
+   * API response across up to five JSONL lines, and a resumed session copies
+   * prior turns into a new file. Dedupe is correctness here, not hygiene.
+   *
+   * `session_db_id` deliberately carries NO foreign key: an ON DELETE CASCADE
+   * would erase spend history the moment a session row is pruned, and spend
+   * that already happened does not stop having happened.
+   *
+   * `transcript_read_state` is the tailer's byte-offset watermark. It lives
+   * in SQLite rather than beside the JSON state file used by
+   * services/transcripts/watcher.ts so the rows and the watermark advance in
+   * one transaction — a crash must re-read, never skip.
+   *
+   * Same shape as ensureSyncOutbox: CREATE IF NOT EXISTS is the real guard;
+   * the version row is bookkeeping.
+   */
+  private ensureTokenUsageTables(): void {
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS token_usage_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_key TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL CHECK(source IN ('plugin', 'user')),
+        component TEXT NOT NULL,
+        platform_source TEXT NOT NULL DEFAULT 'claude',
+        project TEXT,
+        session_db_id INTEGER,
+        content_session_id TEXT,
+        model TEXT,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        thinking_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL,
+        is_sidechain INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        created_at_epoch INTEGER NOT NULL
+      )
+    `);
+
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_token_usage_range ON token_usage_events(created_at_epoch)');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_token_usage_scope ON token_usage_events(project, created_at_epoch)');
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS transcript_read_state (
+        transcript_path TEXT PRIMARY KEY,
+        byte_offset INTEGER NOT NULL DEFAULT 0,
+        file_size INTEGER NOT NULL DEFAULT 0,
+        last_message_id TEXT,
+        updated_at_epoch INTEGER NOT NULL
+      )
+    `);
+
+    this.db.prepare('INSERT OR IGNORE INTO schema_versions (version, applied_at) VALUES (?, ?)').run(50, new Date().toISOString());
   }
 
   private dropDeadPendingMessagesColumns(): void {
@@ -1711,6 +1775,17 @@ export class SessionStore {
     }
     this.db.run(
       'CREATE INDEX IF NOT EXISTS idx_observations_merged_into ON observations(merged_into_project)'
+    );
+    // Covering index for the Explorer's distinct-days scan
+    // (PaginationHelper.getExplorerDay). That query derives the local day with
+    // date(created_at_epoch, ...), which no index can seek, so it always reads
+    // every row — but with project, merged_into_project and created_at_epoch all
+    // in one index it reads them from the index instead of from a table whose
+    // rows carry the narrative and text blobs. Created here rather than beside
+    // the other observation indexes because merged_into_project only exists
+    // after the ALTER above.
+    this.db.run(
+      'CREATE INDEX IF NOT EXISTS idx_observations_day_scope ON observations(project, merged_into_project, created_at_epoch)'
     );
 
     const sumCols = this.db
@@ -3244,5 +3319,105 @@ export class SessionStore {
     );
 
     return { imported: true, id: result.lastInsertRowid as number };
+  }
+
+  /**
+   * Records one model call. A repeated event_key is a silent no-op, which is
+   * what makes both capture paths safely re-runnable.
+   *
+   * ON CONFLICT(event_key) rather than INSERT OR IGNORE: OR IGNORE swallows
+   * every constraint, so a malformed source or component would vanish as a
+   * missing row instead of raising. Only the duplicate key is meant to be
+   * quiet.
+   */
+  recordTokenUsage(event: TokenUsageEvent): void {
+    this.db.prepare(`
+      INSERT INTO token_usage_events (
+        event_key, source, component, platform_source, project, session_db_id,
+        content_session_id, model, input_tokens, cache_creation_tokens,
+        cache_read_tokens, output_tokens, thinking_tokens, cost_usd,
+        is_sidechain, created_at, created_at_epoch
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(event_key) DO NOTHING
+    `).run(
+      event.eventKey,
+      event.source,
+      event.component,
+      normalizePlatformSource(event.platformSource),
+      event.project ?? null,
+      event.sessionDbId ?? null,
+      event.contentSessionId ?? null,
+      event.model ?? null,
+      event.inputTokens ?? 0,
+      event.cacheCreationTokens ?? 0,
+      event.cacheReadTokens ?? 0,
+      event.outputTokens ?? 0,
+      event.thinkingTokens ?? 0,
+      event.costUsd ?? null,
+      event.isSidechain ? 1 : 0,
+      new Date(event.epoch).toISOString(),
+      event.epoch
+    );
+  }
+
+  /**
+   * Writes a batch of transcript-derived events and advances that
+   * transcript's watermark in ONE transaction. Splitting the two would let a
+   * crash between them skip a range of turns permanently; re-reading a range
+   * costs nothing because event_key dedupes it.
+   */
+  recordTokenUsageBatch(
+    events: TokenUsageEvent[],
+    transcriptPath: string,
+    nextOffset: number,
+    fileSize: number
+  ): number {
+    let inserted = 0;
+    const tx = this.db.transaction(() => {
+      const before = this.db.prepare('SELECT COUNT(*) AS n FROM token_usage_events').get() as { n: number };
+      for (const event of events) {
+        this.recordTokenUsage(event);
+      }
+      const after = this.db.prepare('SELECT COUNT(*) AS n FROM token_usage_events').get() as { n: number };
+      inserted = after.n - before.n;
+
+      const lastMessageId = events.length > 0 ? events[events.length - 1].eventKey : null;
+      this.db.prepare(`
+        INSERT INTO transcript_read_state (transcript_path, byte_offset, file_size, last_message_id, updated_at_epoch)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(transcript_path) DO UPDATE SET
+          byte_offset = excluded.byte_offset,
+          file_size = excluded.file_size,
+          last_message_id = COALESCE(excluded.last_message_id, transcript_read_state.last_message_id),
+          updated_at_epoch = excluded.updated_at_epoch
+      `).run(transcriptPath, nextOffset, fileSize, lastMessageId, Date.now());
+    });
+    tx();
+    return inserted;
+  }
+
+  getTranscriptReadState(transcriptPath: string): TranscriptReadState | null {
+    const row = this.db.prepare(`
+      SELECT transcript_path, byte_offset, file_size, last_message_id, updated_at_epoch
+      FROM transcript_read_state WHERE transcript_path = ?
+    `).get(transcriptPath) as {
+      transcript_path: string;
+      byte_offset: number;
+      file_size: number;
+      last_message_id: string | null;
+      updated_at_epoch: number;
+    } | undefined;
+    if (!row) return null;
+    return {
+      transcriptPath: row.transcript_path,
+      byteOffset: row.byte_offset,
+      fileSize: row.file_size,
+      lastMessageId: row.last_message_id,
+      updatedAtEpoch: row.updated_at_epoch,
+    };
+  }
+
+  clearTranscriptReadState(transcriptPath: string): void {
+    this.db.prepare('DELETE FROM transcript_read_state WHERE transcript_path = ?').run(transcriptPath);
   }
 }

@@ -70,12 +70,13 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand) {
     host: 'claude-code', requireFile: 'bun-runner.js', requireFileSecondary: 'worker-service.cjs',
     trailingCommand: ccTrailing(...tail), notFoundMessage: 'claude-mem: plugin scripts not found', ...extra,
   });
-  const codexHook = (tail) => buildShellCommand({
+  const codexHook = (tail, extra = {}) => buildShellCommand({
     host: 'codex-cli', requireFile: 'bun-runner.js', requireFileSecondary: 'worker-service.cjs',
     trailingCommand: ccTrailing(...tail), notFoundMessage: 'claude-mem: plugin scripts not found',
-    extraEnv: { CLAUDE_MEM_CODEX_HOOK: '1' },
+    extraEnv: { CLAUDE_MEM_CODEX_HOOK: '1' }, ...extra,
   });
   const codexStartupHook = () => buildShellCommand({
+    failureSite: 'codex:SessionStart:context',
     host: 'codex-cli', requireFile: 'bun-runner.js', requireFileSecondary: 'worker-service.cjs',
     trailingCommand: [
       '_V=$(CLAUDE_MEM_CODEX_HOOK=1 node "$_P/scripts/version-check.js" || true);',
@@ -86,7 +87,9 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand) {
     notFoundMessage: 'claude-mem: plugin scripts not found',
   });
   const codexHookPair = (tail, options = {}) => ({
-    command: options.startupVersionCheck ? codexStartupHook() : codexHook(tail),
+    command: options.startupVersionCheck
+      ? codexStartupHook()
+      : codexHook(tail, { failureSite: options.failureSite }),
     commandWindows: buildCodexWindowsCommand(tail, options),
   });
 
@@ -98,6 +101,7 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand) {
           host: 'claude-code-setup', requireFile: 'version-check.js',
           trailingCommand: ['node', '"$_P/scripts/version-check.js"'],
           notFoundMessage: 'claude-mem: version-check.js not found',
+          failureSite: 'Setup:version-check',
         }),
         // `start` already emits its own single, valid status JSON via
         // buildStatusOutput ({"continue":true,"status":"ready","suppressOutput":true}).
@@ -105,22 +109,51 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand) {
         // stdout — two concatenated documents are invalid JSON, so Claude Code
         // fails to parse them, ignores suppressOutput, and dumps the raw text at
         // the top of every session. Let `start` speak for itself.
-        'SessionStart.0.0': claudeHook(['start']),
-        'SessionStart.0.1': claudeHook(['hook', 'claude-code', 'context']),
-        'UserPromptSubmit.0.0': claudeHook(['hook', 'claude-code', 'session-init']),
-        'PostToolUse.0.0': claudeHook(['hook', 'claude-code', 'observation']),
-        'PreToolUse.0.0': claudeHook(['hook', 'claude-code', 'file-context']),
-        'Stop.0.0': claudeHook(['hook', 'claude-code', 'summarize']),
+        'SessionStart.0.0': claudeHook(['start'], { failureSite: 'SessionStart:start' }),
+        // The ONE site that speaks up. It runs once per session and its result
+        // shape already carries a user-visible systemMessage, so a resolution
+        // failure can announce itself here without spamming the session or
+        // colliding with another hook's status JSON.
+        'SessionStart.0.1': claudeHook(['hook', 'claude-code', 'context'], {
+          failureSite: 'SessionStart:context',
+          notFoundJson: {
+            continue: true,
+            hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: '' },
+            systemMessage:
+              'claude-mem could not locate its plugin scripts, so nothing was loaded or recorded '
+              + 'for this session. Reinstall with: claude plugin install claude-mem-pro-max@max2535',
+          },
+        }),
+        'UserPromptSubmit.0.0': claudeHook(['hook', 'claude-code', 'session-init'], {
+          failureSite: 'UserPromptSubmit:session-init',
+        }),
+        'PostToolUse.0.0': claudeHook(['hook', 'claude-code', 'observation'], {
+          failureSite: 'PostToolUse:observation',
+        }),
+        'PreToolUse.0.0': claudeHook(['hook', 'claude-code', 'file-context'], {
+          failureSite: 'PreToolUse:file-context',
+        }),
+        'Stop.0.0': claudeHook(['hook', 'claude-code', 'summarize'], { failureSite: 'Stop:summarize' }),
       },
     },
     'plugin/hooks/codex-hooks.json': {
       kind: 'hooks',
       commands: {
-        'SessionStart.0.0': codexHookPair(['hook', 'codex', 'context'], { startupVersionCheck: true }),
-        'UserPromptSubmit.0.0': codexHookPair(['hook', 'codex', 'session-init']),
-        'PreToolUse.0.0': codexHookPair(['hook', 'codex', 'file-context']),
-        'PostToolUse.0.0': codexHookPair(['hook', 'codex', 'observation']),
-        'Stop.0.0': codexHookPair(['hook', 'codex', 'summarize']),
+        'SessionStart.0.0': codexHookPair(['hook', 'codex', 'context'], {
+          startupVersionCheck: true, failureSite: 'codex:SessionStart:context',
+        }),
+        'UserPromptSubmit.0.0': codexHookPair(['hook', 'codex', 'session-init'], {
+          failureSite: 'codex:UserPromptSubmit:session-init',
+        }),
+        'PreToolUse.0.0': codexHookPair(['hook', 'codex', 'file-context'], {
+          failureSite: 'codex:PreToolUse:file-context',
+        }),
+        'PostToolUse.0.0': codexHookPair(['hook', 'codex', 'observation'], {
+          failureSite: 'codex:PostToolUse:observation',
+        }),
+        'Stop.0.0': codexHookPair(['hook', 'codex', 'summarize'], {
+          failureSite: 'codex:Stop:summarize',
+        }),
       },
     },
     'plugin/.mcp.json': {
@@ -130,10 +163,11 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand) {
         // no trailingCommand is needed (it is ignored for this host).
         host: 'mcp', requireFile: 'mcp-server.cjs',
         notFoundMessage: 'claude-mem: mcp server not found',
+        failureSite: 'mcp:search',
         mcpExtraCandidates: ['$PWD/plugin', '$PWD'],
         mcpExtraCacheRoots: [
           '$HOME/.codex/plugins/cache/claude-mem-local/claude-mem',
-          '$HOME/.codex/plugins/cache/thedotmack/claude-mem',
+          '$HOME/.codex/plugins/cache/max2535/claude-mem-pro-max',
         ],
       }),
     },
@@ -740,17 +774,22 @@ async function buildHooks() {
     if (claudeMemMarketplaceEntry?.source?.path !== './plugin') {
       throw new Error('.agents/plugins/marketplace.json must point claude-mem source.path at ./plugin so Codex loads the bundled plugin root');
     }
+    // Launcher strings first: the checks below read plugin/.mcp.json, which this
+    // call regenerates under --write-shell-templates. Verifying the artifact
+    // before regenerating it made an intentional generator change unbuildable —
+    // the guard rejected the stale file, and the step that would have refreshed
+    // it never ran.
+    await verifyShellTemplateCanonical();
+
     const bundledMcp = JSON.parse(fs.readFileSync('plugin/.mcp.json', 'utf-8'));
     const mcpSearchCommand = bundledMcp.mcpServers?.['mcp-search']?.args?.join(' ') ?? '';
     if (!mcpSearchCommand.includes('.codex/plugins/cache/claude-mem-local/claude-mem')) {
       throw new Error('plugin/.mcp.json mcp-search launcher must include Codex cache fallback for hosts that do not inject PLUGIN_ROOT');
     }
-    if (!mcpSearchCommand.includes('plugins/cache/thedotmack/claude-mem')) {
+    if (!mcpSearchCommand.includes('plugins/cache/max2535/claude-mem-pro-max')) {
       throw new Error('plugin/.mcp.json mcp-search launcher must include Claude cache fallback for hosts that do not inject PLUGIN_ROOT');
     }
     console.log('✓ All required distribution files present');
-
-    await verifyShellTemplateCanonical();
 
     console.log('\n✅ All build targets compiled successfully!');
     console.log(`   Output: ${hooksDir}/`);

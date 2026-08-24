@@ -142,6 +142,10 @@ export const summarizeHandler: EventHandler = {
         contentSessionId: sessionId,
         last_assistant_message: lastAssistantMessage,
         platformSource,
+        // Carried so the worker can tail this transcript for token usage. The
+        // hook does not read it for that — it has no database handle, and the
+        // worker is the single writer.
+        transcriptPath,
       },
     );
     if (isWorkerFallback(queueResult)) {

@@ -1,7 +1,11 @@
+import type { AgentFlowEventInput } from '../events/AgentFlowBuffer.js';
+
 
 export interface WorkerRef {
   sseBroadcaster?: {
     broadcast(event: SSEEventPayload): void;
+    /** Optional so existing worker doubles in tests need no Agent Flow stub. */
+    emitFlow?(input: AgentFlowEventInput): unknown;
   };
   broadcastProcessingStatus?: () => void;
 }

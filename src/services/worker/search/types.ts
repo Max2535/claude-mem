@@ -44,17 +44,39 @@ export interface ExtendedSearchOptions extends SearchOptions {
   format?: 'text' | 'json';
 }
 
-export type SearchStrategyHint = 'chroma' | 'sqlite' | 'hybrid' | 'auto';
+export type SearchStrategyHint = 'chroma' | 'sqlite' | 'hybrid' | 'vectorless' | 'auto';
 
 export interface StrategySearchOptions extends ExtendedSearchOptions {
   query?: string;
   strategyHint?: SearchStrategyHint;
 }
 
+export interface SourceCoverage {
+  indexed: Record<string, number>;
+  matched: Record<string, number>;
+  /**
+   * Rows matching the caller's filter BEFORE maxIndexRows capped the index —
+   * a COUNT query, never the length of a fetched array. Without it "no match"
+   * and "no match in the 8% of memory that was searched" read identically.
+   */
+  total: Record<string, number>;
+  /** Per source: the filter matches more rows than the index could hold. */
+  truncated: Record<string, boolean>;
+}
+
+export interface TraversalTrace {
+  rounds: number;
+  daysWalked: string[];
+  sessionsWalked: string[];
+  indexRows: number;
+}
+
 export interface StrategySearchResult {
   results: SearchResults;
   usedChroma: boolean;
   strategy: SearchStrategyHint;
+  coverage?: SourceCoverage;
+  traversal?: TraversalTrace;
 }
 
 export interface CombinedResult {
