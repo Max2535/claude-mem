@@ -128,37 +128,48 @@
 
 ---
 
+## About This Fork
+
+This is a fork of [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem).
+It ships as the plugin **`claude-mem-pro-max`** from the marketplace **`max2535`**,
+so its plugin id is `claude-mem-pro-max@max2535`.
+
+> **Do not add upstream's marketplace alongside this one.** The marketplace name is
+> the key Claude Code stores in `known_marketplaces.json`. Upstream registers itself
+> as `thedotmack`; this fork registers as `max2535` for exactly that reason. If you
+> add a marketplace that reuses a key you already have, it collides and can replace
+> the installed plugin without saying so.
+
+---
+
 ## Quick Start
 
-Install with a single command:
+This fork is not published to npm, so there is no `npx` installer for it — install it
+from your own clone as a path-registered marketplace:
 
 ```bash
-npx claude-mem install
+git clone https://github.com/Max2535/claude-mem.git
+cd claude-mem
+npm install
+claude plugin marketplace add .
+npm run build-local
 ```
 
-Or install for OpenCode:
+`npm run build-local` builds the plugin, then uninstalls and reinstalls
+`claude-mem-pro-max@max2535` and restarts the worker. The reinstall is not
+belt-and-braces: `claude plugin marketplace update` does not refresh an already
+installed plugin.
+
+Or, from inside Claude Code once the marketplace above is registered:
 
 ```bash
-npx claude-mem install --ide opencode
-```
-
-Or install for Antigravity CLI ([setup guide](https://docs.claude-mem.ai/antigravity-cli/setup)):
-
-```bash
-npx claude-mem install --ide antigravity
-```
-
-Or install from the plugin marketplace inside Claude Code:
-
-```bash
-/plugin marketplace add thedotmack/claude-mem
-
-/plugin install claude-mem
+/plugin install claude-mem-pro-max@max2535
 ```
 
 Restart Claude Code. Context from previous sessions will automatically appear in new sessions.
 
-> **Note:** Claude-Mem is also published on npm, but `npm install -g claude-mem` installs the **SDK/library only** — it does not register the plugin hooks or set up the worker service. Always install via `npx claude-mem install` or the `/plugin` commands above.
+> **Note:** `npm install -g claude-mem` installs **upstream's** SDK/library — not this
+> fork, and not the plugin hooks or the worker service either way.
 
 ### 🦞 OpenClaw Gateway
 
@@ -167,6 +178,9 @@ Install claude-mem as a persistent memory plugin on [OpenClaw](https://openclaw.
 ```bash
 curl -fsSL https://install.cmem.ai/openclaw.sh | bash
 ```
+
+> This installer is served by upstream and installs **upstream's** claude-mem, not this
+> fork. There is no fork equivalent.
 
 The installer handles dependencies, plugin setup, AI provider configuration, worker startup, and optional real-time observation feeds to Telegram, Discord, Slack, and more. See the [OpenClaw Integration Guide](https://docs.claude-mem.ai/openclaw-integration) for details.
 
@@ -368,8 +382,12 @@ See the **[Troubleshooting Guide](https://docs.claude-mem.ai/troubleshooting)** 
 
 Create comprehensive bug reports with the automated generator:
 
+Run it from your clone of this repository — the directory you registered with
+`claude plugin marketplace add`. A path-registered marketplace never creates
+`~/.claude/plugins/marketplaces/<name>/`, so that path holds nothing Claude Code reads:
+
 ```bash
-cd ~/.claude/plugins/marketplaces/thedotmack
+cd /path/to/your/claude-mem
 npm run bug-report
 ```
 
@@ -411,20 +429,16 @@ open/commercial boundary.
 ## Support
 
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/thedotmack/claude-mem/issues)
-- **Repository**: [github.com/thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)
-- **Official X Account**: [@Claude_Memory](https://x.com/Claude_Memory)
-- **Official Discord**: [Join Discord](https://discord.com/invite/J4wttp9vDu)
-- **Author**: Alex Newman ([@thedotmack](https://github.com/thedotmack))
+- **Repository**: [github.com/Max2535/claude-mem](https://github.com/Max2535/claude-mem)
+- **Issues**: this fork has Issues disabled, so there is no tracker to file against.
+  Raise fork-specific problems on a pull request here, attaching the output of
+  `npm run bug-report`. Do not file them upstream — upstream does not ship this code.
+- **Upstream project**: [github.com/thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)
+  — its [Issues](https://github.com/thedotmack/claude-mem/issues),
+  [X account](https://x.com/Claude_Memory) and [Discord](https://discord.com/invite/J4wttp9vDu)
+  cover upstream's code only.
+- **Upstream author**: Alex Newman ([@thedotmack](https://github.com/thedotmack))
 
 ---
 
 **Built with Claude Agent SDK** | **Works with Claude Code** | **Made with TypeScript**
-
----
-
-### What About CMEM?
-
-CMEM is a token created by a 3rd party but officially embraced by the creator of Claude-Mem (Alex Newman, @thedotmack). The token acts as a community catalyst for growth and a vehicle for bringing CMEM to the developers and knowledge workers that need it most.
-
-Official BASE CA: 0x76b1967eec0ccaeb001bbbb2b40dc4badba31ba3
