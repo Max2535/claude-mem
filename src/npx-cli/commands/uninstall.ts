@@ -24,6 +24,7 @@ import {
   type InstallRuntimeId,
 } from './server-runtime-setup.js';
 import { captureCliEvent } from '../../services/telemetry/cli-telemetry.js';
+import { MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY, PLUGIN_DATA_DIR_NAME } from '../../shared/plugin-identity.js';
 
 // #2568 — read the runtime the operator installed so uninstall can dispatch to
 // the matching teardown. The worker path is the default and is unchanged: only
@@ -74,7 +75,7 @@ function removeMarketplaceDirectory(): boolean {
 }
 
 function removeCacheDirectory(): boolean {
-  const cacheDirectory = join(pluginsDirectory(), 'cache', 'thedotmack', 'claude-mem');
+  const cacheDirectory = join(pluginsDirectory(), 'cache', MARKETPLACE_NAME, PLUGIN_NAME);
   if (existsSync(cacheDirectory)) {
     rmSync(cacheDirectory, { recursive: true, force: true });
     return true;
@@ -84,16 +85,16 @@ function removeCacheDirectory(): boolean {
 
 function removeFromKnownMarketplaces(): void {
   const knownMarketplaces = readJsonSafe<Record<string, any>>(knownMarketplacesPath(), {});
-  if (knownMarketplaces['thedotmack']) {
-    delete knownMarketplaces['thedotmack'];
+  if (knownMarketplaces[MARKETPLACE_NAME]) {
+    delete knownMarketplaces[MARKETPLACE_NAME];
     writeJsonFileAtomic(knownMarketplacesPath(), knownMarketplaces);
   }
 }
 
 function removeFromInstalledPlugins(): void {
   const installedPlugins = readJsonSafe<Record<string, any>>(installedPluginsPath(), {});
-  if (installedPlugins.plugins?.['claude-mem-pro-max@max2535']) {
-    delete installedPlugins.plugins['claude-mem-pro-max@max2535'];
+  if (installedPlugins.plugins?.[PLUGIN_SETTINGS_KEY]) {
+    delete installedPlugins.plugins[PLUGIN_SETTINGS_KEY];
     writeJsonFileAtomic(installedPluginsPath(), installedPlugins);
   }
 }
@@ -133,8 +134,8 @@ export function removeFromClaudeSettings(): void {
   const settings = readJsonSafe<Record<string, any>>(claudeSettingsPath(), {});
   let dirty = false;
 
-  if (settings.enabledPlugins?.['claude-mem-pro-max@max2535'] !== undefined) {
-    delete settings.enabledPlugins['claude-mem-pro-max@max2535'];
+  if (settings.enabledPlugins?.[PLUGIN_SETTINGS_KEY] !== undefined) {
+    delete settings.enabledPlugins[PLUGIN_SETTINGS_KEY];
     dirty = true;
   }
 
@@ -223,7 +224,7 @@ function removeStrayClaudeMemPaths(): number {
     }
   }
 
-  const pluginDataDir = join(home, '.claude', 'plugins', 'data', 'claude-mem-thedotmack');
+  const pluginDataDir = join(home, '.claude', 'plugins', 'data', PLUGIN_DATA_DIR_NAME);
   if (existsSync(pluginDataDir)) {
     try {
       rmSync(pluginDataDir, { recursive: true, force: true });

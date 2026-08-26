@@ -769,10 +769,21 @@ async function buildHooks() {
         throw new Error(`plugin/hooks/codex-hooks.json contains unknown Codex hook event: ${eventName}`);
       }
     }
+    // The entry name is not hardcoded: it has to track whatever
+    // plugin/.codex-plugin/plugin.json calls itself, because Codex matches the
+    // two. Pinning the old literal here is how the 87a7e4c rename left the
+    // marketplace advertising `claude-mem` while the manifest said
+    // `claude-mem-pro-max`, and the build still passed.
+    const codexPluginName = JSON.parse(
+      fs.readFileSync('plugin/.codex-plugin/plugin.json', 'utf-8')
+    ).name;
     const codexMarketplace = JSON.parse(fs.readFileSync('.agents/plugins/marketplace.json', 'utf-8'));
-    const claudeMemMarketplaceEntry = (codexMarketplace.plugins ?? []).find((plugin) => plugin.name === 'claude-mem');
-    if (claudeMemMarketplaceEntry?.source?.path !== './plugin') {
-      throw new Error('.agents/plugins/marketplace.json must point claude-mem source.path at ./plugin so Codex loads the bundled plugin root');
+    const claudeMemMarketplaceEntry = (codexMarketplace.plugins ?? []).find((plugin) => plugin.name === codexPluginName);
+    if (!claudeMemMarketplaceEntry) {
+      throw new Error(`.agents/plugins/marketplace.json has no plugin named ${codexPluginName}, the name plugin/.codex-plugin/plugin.json declares; Codex resolves the plugin by that name`);
+    }
+    if (claudeMemMarketplaceEntry.source?.path !== './plugin') {
+      throw new Error(`.agents/plugins/marketplace.json must point ${codexPluginName} source.path at ./plugin so Codex loads the bundled plugin root`);
     }
     // Launcher strings first: the checks below read plugin/.mcp.json, which this
     // call regenerates under --write-shell-templates. Verifying the artifact

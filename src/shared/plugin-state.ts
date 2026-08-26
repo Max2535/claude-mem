@@ -4,15 +4,15 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { logger } from '../utils/logger.js';
 import { parseJsonWithBom } from './atomic-json.js';
+import { PLUGIN_SETTINGS_KEY } from './plugin-identity.js';
 
 /**
- * The `<plugin>@<marketplace>` id Claude Code keys this plugin by, in both
- * `settings.json → enabledPlugins` and `plugins/installed_plugins.json`.
- * Exported because it is the only reliable "is the loader actually going to
+ * Re-exported because it is the only reliable "is the loader actually going to
  * fire our hooks?" signal: a marketplace directory on disk is not, as a stale
- * rsync copy of one satisfies that test while the loader ignores it.
+ * rsync copy of one satisfies that test while the loader ignores it. The name
+ * itself lives in plugin-identity.ts with the rest of the fork's identity.
  */
-export const PLUGIN_SETTINGS_KEY = 'claude-mem-pro-max@max2535';
+export { PLUGIN_SETTINGS_KEY } from './plugin-identity.js';
 
 export function isPluginDisabledInClaudeSettings(): boolean {
   try {

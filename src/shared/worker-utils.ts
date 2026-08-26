@@ -4,7 +4,7 @@ import { spawnHidden } from "./spawn.js";
 import { logger } from "../utils/logger.js";
 import { HOOK_TIMEOUTS, getTimeout } from "./hook-constants.js";
 import { SettingsDefaultsManager, type SettingsDefaults } from "./SettingsDefaultsManager.js";
-import { MARKETPLACE_ROOT, DATA_DIR } from "./paths.js";
+import { MARKETPLACE_ROOT, PLUGIN_CACHE_ROOT, DATA_DIR } from "./paths.js";
 import { loadFromFileOnce } from "./hook-settings.js";
 import { validateWorkerPidFile, readOwnedWorkerPidInfo } from "../supervisor/index.js";
 import { emitBlockingError } from "./hook-io.js";
@@ -246,7 +246,7 @@ export function compareVersionsDescending(a: string, b: string): number {
 }
 
 export function cacheWorkerScriptCandidates(
-  cacheRoot: string = path.join(path.dirname(path.dirname(MARKETPLACE_ROOT)), 'cache', 'thedotmack', 'claude-mem')
+  cacheRoot: string = PLUGIN_CACHE_ROOT
 ): WorkerScriptCandidate[] {
   try {
     return readdirSync(cacheRoot)

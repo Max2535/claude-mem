@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "claude-mem",
+      "name": "claude-mem-pro-max",
       "source": {
         "source": "local",
         "path": "./plugin"

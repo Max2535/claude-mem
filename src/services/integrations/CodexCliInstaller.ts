@@ -10,14 +10,19 @@ import { fileURLToPath } from 'url';
 import { logger } from '../../utils/logger.js';
 import { paths } from '../../shared/paths.js';
 import { buildSpawnSyncInvocation, type SpawnSyncInvocation } from '../../shared/spawn.js';
+import { PLUGIN_NAME } from '../../shared/plugin-identity.js';
 
 const CODEX_DIR = path.join(homedir(), '.codex');
 const CODEX_AGENTS_MD_PATH = path.join(CODEX_DIR, 'AGENTS.md');
 const CODEX_TRANSCRIPT_WATCH_CONFIG_PATH = paths.transcriptsConfig();
 const CODEX_CONFIG_PATH = path.join(CODEX_DIR, 'config.toml');
 const MARKETPLACE_NAME = 'claude-mem-local';
-const CODEX_PLUGIN_ID = `claude-mem@${MARKETPLACE_NAME}`;
-const LEGACY_CODEX_PLUGIN_IDS = ['claude-mem@thedotmack'];
+const CODEX_PLUGIN_ID = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
+// Both pre-rename ids: upstream's, and this fork's own before 87a7e4c. Codex
+// keeps whatever `plugin add` last wrote in config.toml, so an id that is no
+// longer advertised by the marketplace has to be disabled explicitly or it
+// lingers as a dead enabled entry.
+const LEGACY_CODEX_PLUGIN_IDS = ['claude-mem@thedotmack', `claude-mem@${MARKETPLACE_NAME}`];
 const MIN_CODEX_MARKETPLACE_VERSION = '0.128.0';
 const REQUIRED_MARKETPLACE_FILES = [
   path.join('.agents', 'plugins', 'marketplace.json'),

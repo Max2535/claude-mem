@@ -1,3 +1,4 @@
+import { MARKETPLACE_NAME } from '../../shared/plugin-identity.js';
 /**
  * Installer error taxonomy — the single source of truth for classifying every
  * failure the universal installer (`npx claude-mem install`) can hit, and the
@@ -110,7 +111,7 @@ export const ERROR_CATEGORIES: ErrorCategory[] = [
       ctx.component === 'plugin-json' &&
       /Unexpected token|JSON|parse/i.test(causeMessage(cause)),
     remediation: () =>
-      'Existing plugin.json is corrupt. Run `rm -rf ~/.claude/plugins/marketplaces/thedotmack` and re-run `npx claude-mem install`.',
+      `Existing plugin.json is corrupt. Run \`rm -rf ~/.claude/plugins/marketplaces/${MARKETPLACE_NAME}\` and re-run \`npx claude-mem install\`.`,
   },
   {
     id: 'all-ides-failed',

@@ -1,9 +1,8 @@
 
 import path from 'path';
-import { homedir } from 'os';
 import { existsSync, unlinkSync } from 'fs';
 import { Database } from 'bun:sqlite';
-import { DB_PATH } from '../../shared/paths.js';
+import { DB_PATH, MARKETPLACE_ROOT } from '../../shared/paths.js';
 import { withHookFailureWarning } from '../../shared/hook-breadcrumb.js';
 import { logger } from '../../utils/logger.js';
 import { getProjectContext } from '../../utils/project-name.js';
@@ -33,15 +32,7 @@ import {
   renderObserverHealthWarning,
 } from '../../shared/observer-health.js';
 
-const VERSION_MARKER_PATH = path.join(
-  homedir(),
-  '.claude',
-  'plugins',
-  'marketplaces',
-  'thedotmack',
-  'plugin',
-  '.install-version'
-);
+const VERSION_MARKER_PATH = path.join(MARKETPLACE_ROOT, 'plugin', '.install-version');
 
 function initializeDatabase(): Database | null {
   try {

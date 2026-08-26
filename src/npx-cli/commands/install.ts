@@ -176,14 +176,15 @@ import { readJsonSafe } from '../../utils/json-utils.js';
 import { readFlatSettings } from '../utils/settings.js';
 import { shutdownWorkerAndWait } from '../../services/install/shutdown-helper.js';
 import { detectInstalledIDEs } from './ide-detection.js';
+import { MARKETPLACE_NAME, MARKETPLACE_REPO, PLUGIN_SETTINGS_KEY } from '../../shared/plugin-identity.js';
 
 function registerMarketplace(): void {
   const knownMarketplaces = readJsonSafe<Record<string, any>>(knownMarketplacesPath(), {});
 
-  knownMarketplaces['thedotmack'] = {
+  knownMarketplaces[MARKETPLACE_NAME] = {
     source: {
       source: 'github',
-      repo: 'thedotmack/claude-mem',
+      repo: MARKETPLACE_REPO,
     },
     installLocation: marketplaceDirectory(),
     lastUpdated: new Date().toISOString(),
@@ -203,7 +204,7 @@ function registerPlugin(version: string): void {
   const cachePath = pluginCacheDirectory(version);
   const now = new Date().toISOString();
 
-  installedPlugins.plugins['claude-mem-pro-max@max2535'] = [
+  installedPlugins.plugins[PLUGIN_SETTINGS_KEY] = [
     {
       scope: 'user',
       installPath: cachePath,
@@ -220,7 +221,7 @@ function enablePluginInClaudeSettings(): void {
   const settings = readJsonSafe<Record<string, any>>(claudeSettingsPath(), {});
 
   if (!settings.enabledPlugins) settings.enabledPlugins = {};
-  settings.enabledPlugins['claude-mem-pro-max@max2535'] = true;
+  settings.enabledPlugins[PLUGIN_SETTINGS_KEY] = true;
 
   writeJsonFileAtomic(claudeSettingsPath(), settings);
 }

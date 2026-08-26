@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { SettingsDefaultsManager } from '../src/shared/SettingsDefaultsManager.js';
-import { USER_SETTINGS_PATH } from '../src/shared/paths.js';
+import { USER_SETTINGS_PATH, MARKETPLACE_ROOT } from '../src/shared/paths.js';
 
 const workerSettings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
 const DEFAULT_WORKER_HOST = workerSettings.CLAUDE_MEM_WORKER_HOST;
@@ -161,7 +161,7 @@ What is this for?
   const healthy = await checkWorkerHealth();
   if (!healthy) {
     console.log(`Worker is not running at ${WORKER_URL}. Start it with:`);
-    console.log('  cd ~/.claude/plugins/marketplaces/thedotmack && npm run worker:start\n');
+    console.log(`  cd ${MARKETPLACE_ROOT} && npm run worker:start\n`);
     process.exit(1);
   }
   console.log(`Worker status: Running at ${WORKER_URL}\n`);

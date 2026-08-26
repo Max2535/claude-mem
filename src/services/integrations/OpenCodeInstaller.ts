@@ -6,6 +6,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, unlin
 import { logger } from '../../utils/logger.js';
 import { CONTEXT_TAG_OPEN, CONTEXT_TAG_CLOSE, injectContextIntoMarkdownFile } from '../../utils/context-injection.js';
 import { getWorkerHost, getWorkerPort } from '../../shared/worker-utils.js';
+import { MARKETPLACE_NAME } from '../../shared/plugin-identity.js';
 
 const OPENCODE_PLUGIN_CONFIG_PATH = './plugins/claude-mem.js';
 
@@ -116,7 +117,7 @@ export function findBuiltPluginPath(): string | null {
   const possiblePaths = [
     path.join(
       process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'),
-      'plugins', 'marketplaces', 'thedotmack',
+      'plugins', 'marketplaces', MARKETPLACE_NAME,
       'dist', 'opencode-plugin', 'index.js',
     ),
     path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'dist', 'opencode-plugin', 'index.js'),

@@ -11,6 +11,7 @@ import {
 import { writeMcpJsonConfig, PLACEHOLDER_CONTEXT } from './McpIntegrations.js';
 import { readJsonSafe } from '../../utils/json-utils.js';
 import { injectContextIntoMarkdownFile } from '../../utils/context-injection.js';
+import { MARKETPLACE_NAME } from '../../shared/plugin-identity.js';
 
 interface AntigravityHookEntry {
   name: string;
@@ -204,7 +205,7 @@ function registerAntigravityMcp(): void {
   const mcpServerPath = getMcpServerAbsolutePath();
   if (!mcpServerPath) {
     console.error('Could not find MCP server script');
-    console.error('   Expected at: ~/.claude/plugins/marketplaces/thedotmack/plugin/scripts/mcp-server.cjs');
+    console.error(`   Expected at: ~/.claude/plugins/marketplaces/${MARKETPLACE_NAME}/plugin/scripts/mcp-server.cjs`);
     throw new Error('MCP server script not found');
   }
 
@@ -226,7 +227,7 @@ export async function installAntigravityCliHooks(): Promise<number> {
   const workerServicePath = findWorkerServicePath();
   if (!workerServicePath) {
     console.error('Could not find worker-service.cjs');
-    console.error('   Expected at: ~/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs');
+    console.error(`   Expected at: ~/.claude/plugins/marketplaces/${MARKETPLACE_NAME}/plugin/scripts/worker-service.cjs`);
     return 1;
   }
 

@@ -14,6 +14,7 @@ import {
   type CursorProjectRegistry
 } from '../../utils/cursor-utils.js';
 import type { CursorInstallTarget, CursorHooksJson } from './types.js';
+import { MARKETPLACE_NAME } from '../../shared/plugin-identity.js';
 import {
   getMcpServerAbsolutePath,
   getWorkerServiceAbsolutePath,
@@ -88,7 +89,7 @@ export function configureCursorMcp(target: CursorInstallTarget): number {
 
   if (!mcpServerPath) {
     console.error('Could not find MCP server script');
-    console.error('   Expected at: ~/.claude/plugins/marketplaces/thedotmack/plugin/scripts/mcp-server.cjs');
+    console.error(`   Expected at: ~/.claude/plugins/marketplaces/${MARKETPLACE_NAME}/plugin/scripts/mcp-server.cjs`);
     return 1;
   }
 
@@ -124,7 +125,7 @@ export async function installCursorHooks(target: CursorInstallTarget): Promise<n
   const workerServicePath = getWorkerServiceAbsolutePath();
   if (!workerServicePath) {
     console.error('Could not find worker-service.cjs');
-    console.error('   Expected at: ~/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs');
+    console.error(`   Expected at: ~/.claude/plugins/marketplaces/${MARKETPLACE_NAME}/plugin/scripts/worker-service.cjs`);
     return 1;
   }
 

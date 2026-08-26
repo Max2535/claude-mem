@@ -3,6 +3,7 @@ import {
   readFileSync,
 } from 'fs';
 import { homedir } from 'os';
+import { MARKETPLACE_NAME, PLUGIN_NAME } from '../../shared/plugin-identity.js';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 export { ensureDirectoryExists, writeJsonFileAtomic } from '../../shared/atomic-json.js';
@@ -14,7 +15,7 @@ export function claudeConfigDirectory(): string {
 }
 
 export function marketplaceDirectory(): string {
-  return join(claudeConfigDirectory(), 'plugins', 'marketplaces', 'thedotmack');
+  return join(claudeConfigDirectory(), 'plugins', 'marketplaces', MARKETPLACE_NAME);
 }
 
 export function pluginsDirectory(): string {
@@ -34,7 +35,7 @@ export function claudeSettingsPath(): string {
 }
 
 export function pluginCacheDirectory(version: string): string {
-  return join(pluginsDirectory(), 'cache', 'thedotmack', 'claude-mem', version);
+  return join(pluginsDirectory(), 'cache', MARKETPLACE_NAME, PLUGIN_NAME, version);
 }
 
 export function npmPackageRootDirectory(): string {

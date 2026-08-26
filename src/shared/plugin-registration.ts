@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from '../utils/logger.js';
 import { PLUGIN_SETTINGS_KEY } from './plugin-state.js';
+import { MARKETPLACE_NAME, PLUGIN_NAME } from './plugin-identity.js';
 
 /**
  * Warn when the MCP server is up but Claude Code will never fire our hooks.
@@ -35,7 +36,7 @@ export function detectMissingMarketplaceMarker(home: string = homedir()): void {
   });
   if (registered) return;
 
-  const cacheCandidates = configRoots.map((root) => resolve(root, 'cache', 'max2535', 'claude-mem-pro-max'));
+  const cacheCandidates = configRoots.map((root) => resolve(root, 'cache', MARKETPLACE_NAME, PLUGIN_NAME));
   if (!cacheCandidates.some((p) => existsSync(p))) return;
 
   logger.error(

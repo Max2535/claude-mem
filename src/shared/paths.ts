@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { SettingsDefaultsManager } from './SettingsDefaultsManager.js';
 import { parseJsonWithBom } from './atomic-json.js';
+import { MARKETPLACE_NAME, PLUGIN_NAME } from './plugin-identity.js';
 
 function getDirname(): string {
   if (typeof __dirname !== 'undefined') {
@@ -60,7 +61,9 @@ export function resolveDataDir(): string {
 export const DATA_DIR = resolveDataDir();
 export const CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
 
-export const MARKETPLACE_ROOT = join(CLAUDE_CONFIG_DIR, 'plugins', 'marketplaces', 'thedotmack');
+export const PLUGINS_ROOT = join(CLAUDE_CONFIG_DIR, 'plugins');
+export const MARKETPLACE_ROOT = join(PLUGINS_ROOT, 'marketplaces', MARKETPLACE_NAME);
+export const PLUGIN_CACHE_ROOT = join(PLUGINS_ROOT, 'cache', MARKETPLACE_NAME, PLUGIN_NAME);
 
 export const LOGS_DIR = join(DATA_DIR, 'logs');
 export const USER_SETTINGS_PATH = join(DATA_DIR, 'settings.json');

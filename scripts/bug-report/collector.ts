@@ -5,6 +5,7 @@ import { promisify } from "util";
 import * as os from "os";
 import { SettingsDefaultsManager } from "../../src/shared/SettingsDefaultsManager.js";
 import { USER_SETTINGS_PATH } from "../../src/shared/paths.js";
+import { MARKETPLACE_NAME } from "../../src/shared/plugin-identity.js";
 
 const execAsync = promisify(exec);
 
@@ -213,7 +214,7 @@ export async function collectDiagnostics(
     ".claude",
     "plugins",
     "marketplaces",
-    "thedotmack"
+    MARKETPLACE_NAME
   );
   const cwd = process.cwd();
   const isDevMode = cwd.includes("claude-mem") && !cwd.includes(".claude");
