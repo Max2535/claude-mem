@@ -94,7 +94,10 @@ function isPluginDisabledInClaudeSettings() {
     return Boolean(
       settings &&
       settings.enabledPlugins &&
-      settings.enabledPlugins['claude-mem@thedotmack'] === false
+      // Kept in sync by hand with PLUGIN_SETTINGS_KEY in
+      // src/shared/plugin-identity.ts. This launcher is loaded raw, so it
+      // cannot import it; build-hooks.js asserts the two agree.
+      settings.enabledPlugins['claude-mem-pro-max@max2535'] === false
     );
   } catch {
     return false;

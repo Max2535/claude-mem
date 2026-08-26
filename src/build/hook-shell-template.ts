@@ -23,6 +23,14 @@
 
 import { MARKETPLACE_NAME, PLUGIN_NAME } from '../shared/plugin-identity.js';
 
+/**
+ * Re-exported for scripts/build-hooks.js: it imports this module as bundled
+ * ESM through a data: URL, which is its only route to the identity constants
+ * from plain JS. Build-time guards there assert the generated launchers and
+ * bun-runner.js agree with these.
+ */
+export { MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY } from '../shared/plugin-identity.js';
+
 /** `<marketplace>/<plugin>` — the cache path segment Claude Code installs into. */
 const CACHE_SEGMENT = `${MARKETPLACE_NAME}/${PLUGIN_NAME}`;
 /** The marketplace install dir, the last link in the fallback chain. */

@@ -344,7 +344,7 @@ Edit your settings file at `~/.claude-mem/settings.json`:
 Modes are defined in `plugin/modes/`. To see all available modes locally:
 
 ```bash
-ls ~/.claude/plugins/marketplaces/thedotmack/plugin/modes/
+ls ~/.claude/plugins/marketplaces/max2535/plugin/modes/
 ```
 
 #### Available Modes

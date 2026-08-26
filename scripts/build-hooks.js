@@ -32,6 +32,13 @@ const TRANSCRIPT_WATCHER = {
   source: 'src/services/transcripts/transcript-watcher-entry.ts'
 };
 
+/**
+ * The marketplace name CodexCliInstaller registers Codex under. Local to
+ * Codex, so it is deliberately NOT MARKETPLACE_NAME; kept in sync by hand
+ * with MARKETPLACE_NAME in src/services/integrations/CodexCliInstaller.ts.
+ */
+const CODEX_MARKETPLACE_NAME = 'claude-mem-local';
+
 function stripHardcodedDirname(filePath) {
   let content = fs.readFileSync(filePath, 'utf-8');
   const before = content.length;
@@ -62,7 +69,13 @@ function stripHardcodedDirname(filePath) {
  * #1215, #1533). See src/build/hook-shell-template.ts and CLAUDE.md →
  * "Spawn-Contract Resolution".
  */
-function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand) {
+function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand, identity) {
+  // Codex installs this plugin under its own local marketplace, so the cache
+  // segment is `claude-mem-local/<plugin>` -- a different marketplace, but the
+  // same plugin name, which is why it has to track PLUGIN_NAME and not be a
+  // literal. It was one, and it went stale across the 87a7e4c rename.
+  const codexCacheRoot = `$HOME/.codex/plugins/cache/${CODEX_MARKETPLACE_NAME}/${identity.PLUGIN_NAME}`;
+  const claudeCacheRoot = `plugins/cache/${identity.MARKETPLACE_NAME}/${identity.PLUGIN_NAME}`;
   const ccTrailing = (...tail) => [
     'node', '"$_P/scripts/bun-runner.js"', '"$_P/scripts/worker-service.cjs"', ...tail,
   ];
@@ -166,8 +179,8 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand) {
         failureSite: 'mcp:search',
         mcpExtraCandidates: ['$PWD/plugin', '$PWD'],
         mcpExtraCacheRoots: [
-          '$HOME/.codex/plugins/cache/claude-mem-local/claude-mem',
-          '$HOME/.codex/plugins/cache/max2535/claude-mem-pro-max',
+          codexCacheRoot,
+          `$HOME/.codex/${claudeCacheRoot}`,
         ],
       }),
     },
@@ -195,9 +208,13 @@ async function verifyShellTemplateCanonical() {
   });
   const moduleSource = bundled.outputFiles[0].text;
   const dataUrl = 'data:text/javascript;base64,' + Buffer.from(moduleSource).toString('base64');
-  const { buildShellCommand, buildCodexWindowsCommand } = await import(dataUrl);
+  const {
+    buildShellCommand, buildCodexWindowsCommand,
+    MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY,
+  } = await import(dataUrl);
+  const identity = { MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY };
 
-  const manifest = shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand);
+  const manifest = shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand, identity);
 
   // The regeneration mode the mismatch errors point at: after an intentional
   // generator change, rewrite the committed launcher strings from the same
@@ -263,6 +280,16 @@ async function verifyShellTemplateCanonical() {
     );
   }
 
+  // bun-runner.js hardcodes the enabledPlugins key because it is loaded raw by
+  // hosts, unbundled. Assert the copy still matches PLUGIN_SETTINGS_KEY -- a
+  // stale one here silently ignores a user who disabled the plugin.
+  if (!bunRunner.includes(`'${PLUGIN_SETTINGS_KEY}'`)) {
+    throw new Error(
+      `plugin/scripts/bun-runner.js does not check enabledPlugins['${PLUGIN_SETTINGS_KEY}'] — ` +
+      'it hardcodes the key from src/shared/plugin-identity.ts and has drifted from it.'
+    );
+  }
+
   // Parser-compat guard (issue #2791): bun-runner.js is invoked by hosts that
   // may run a pre-ES2020 Node whose ESM loader throws on optional chaining.
   // Strip comments, then forbid `?.` / `??` in executable code.
@@ -277,6 +304,7 @@ async function verifyShellTemplateCanonical() {
   }
 
   console.log('✓ Rule A shell templates match the canonical generator');
+  return identity;
 }
 
 async function buildHooks() {
@@ -790,14 +818,14 @@ async function buildHooks() {
     // before regenerating it made an intentional generator change unbuildable —
     // the guard rejected the stale file, and the step that would have refreshed
     // it never ran.
-    await verifyShellTemplateCanonical();
+    const { MARKETPLACE_NAME, PLUGIN_NAME } = await verifyShellTemplateCanonical();
 
     const bundledMcp = JSON.parse(fs.readFileSync('plugin/.mcp.json', 'utf-8'));
     const mcpSearchCommand = bundledMcp.mcpServers?.['mcp-search']?.args?.join(' ') ?? '';
-    if (!mcpSearchCommand.includes('.codex/plugins/cache/claude-mem-local/claude-mem')) {
+    if (!mcpSearchCommand.includes(`.codex/plugins/cache/${CODEX_MARKETPLACE_NAME}/${PLUGIN_NAME}`)) {
       throw new Error('plugin/.mcp.json mcp-search launcher must include Codex cache fallback for hosts that do not inject PLUGIN_ROOT');
     }
-    if (!mcpSearchCommand.includes('plugins/cache/max2535/claude-mem-pro-max')) {
+    if (!mcpSearchCommand.includes(`plugins/cache/${MARKETPLACE_NAME}/${PLUGIN_NAME}`)) {
       throw new Error('plugin/.mcp.json mcp-search launcher must include Claude cache fallback for hosts that do not inject PLUGIN_ROOT');
     }
     console.log('✓ All required distribution files present');

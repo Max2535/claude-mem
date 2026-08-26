@@ -5,6 +5,13 @@ import { spawnSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildCodexWindowsCommand, buildShellCommand } from '../../src/build/hook-shell-template.js';
+import { MARKETPLACE_NAME, PLUGIN_NAME } from '../../src/shared/plugin-identity.js';
+
+// Codex's own local marketplace, mirrored from scripts/build-hooks.js. Only
+// the plugin half of the segment is shared with the Claude Code identity.
+const CODEX_MARKETPLACE_NAME = 'claude-mem-local';
+const CODEX_CACHE_ROOT = `$HOME/.codex/plugins/cache/${CODEX_MARKETPLACE_NAME}/${PLUGIN_NAME}`;
+const CLAUDE_CACHE_SEGMENT = `plugins/cache/${MARKETPLACE_NAME}/${PLUGIN_NAME}`;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -145,8 +152,8 @@ describe('Plugin Distribution - Codex Marketplace', () => {
     const mcp = JSON.parse(readFileSync(mcpPath, 'utf-8'));
     const command = mcp.mcpServers['mcp-search'].args.join(' ');
 
-    expect(command).toContain('.codex/plugins/cache/claude-mem-local/claude-mem');
-    expect(command).toContain('plugins/cache/max2535/claude-mem-pro-max');
+    expect(command).toContain(`.codex/plugins/cache/${CODEX_MARKETPLACE_NAME}/${PLUGIN_NAME}`);
+    expect(command).toContain(CLAUDE_CACHE_SEGMENT);
     expect(command).toContain('claude-mem: mcp server not found');
   });
 });
@@ -428,8 +435,8 @@ const MCP_EXPECTED = buildShellCommand({
   failureSite: 'mcp:search',
   mcpExtraCandidates: ['$PWD/plugin', '$PWD'],
   mcpExtraCacheRoots: [
-    '$HOME/.codex/plugins/cache/claude-mem-local/claude-mem',
-    '$HOME/.codex/plugins/cache/max2535/claude-mem-pro-max',
+    CODEX_CACHE_ROOT,
+    `$HOME/.codex/${CLAUDE_CACHE_SEGMENT}`,
   ],
 });
 
