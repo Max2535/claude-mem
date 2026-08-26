@@ -32,13 +32,6 @@ const TRANSCRIPT_WATCHER = {
   source: 'src/services/transcripts/transcript-watcher-entry.ts'
 };
 
-/**
- * The marketplace name CodexCliInstaller registers Codex under. Local to
- * Codex, so it is deliberately NOT MARKETPLACE_NAME; kept in sync by hand
- * with MARKETPLACE_NAME in src/services/integrations/CodexCliInstaller.ts.
- */
-const CODEX_MARKETPLACE_NAME = 'claude-mem-local';
-
 function stripHardcodedDirname(filePath) {
   let content = fs.readFileSync(filePath, 'utf-8');
   const before = content.length;
@@ -71,10 +64,10 @@ function stripHardcodedDirname(filePath) {
  */
 function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand, identity) {
   // Codex installs this plugin under its own local marketplace, so the cache
-  // segment is `claude-mem-local/<plugin>` -- a different marketplace, but the
-  // same plugin name, which is why it has to track PLUGIN_NAME and not be a
-  // literal. It was one, and it went stale across the 87a7e4c rename.
-  const codexCacheRoot = `$HOME/.codex/plugins/cache/${CODEX_MARKETPLACE_NAME}/${identity.PLUGIN_NAME}`;
+  // segment is `<codex-marketplace>/<plugin>` -- a different marketplace, but
+  // the same plugin name, which is why it has to track PLUGIN_NAME and not be
+  // a literal. It was one, and it went stale across the 87a7e4c rename.
+  const codexCacheRoot = `$HOME/.codex/plugins/cache/${identity.CODEX_MARKETPLACE_NAME}/${identity.PLUGIN_NAME}`;
   const claudeCacheRoot = `plugins/cache/${identity.MARKETPLACE_NAME}/${identity.PLUGIN_NAME}`;
   const ccTrailing = (...tail) => [
     'node', '"$_P/scripts/bun-runner.js"', '"$_P/scripts/worker-service.cjs"', ...tail,
@@ -210,9 +203,11 @@ async function verifyShellTemplateCanonical() {
   const dataUrl = 'data:text/javascript;base64,' + Buffer.from(moduleSource).toString('base64');
   const {
     buildShellCommand, buildCodexWindowsCommand,
-    MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY,
+    MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY, CODEX_MARKETPLACE_NAME,
   } = await import(dataUrl);
-  const identity = { MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY };
+  const identity = {
+    MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_SETTINGS_KEY, CODEX_MARKETPLACE_NAME,
+  };
 
   const manifest = shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand, identity);
 
@@ -280,16 +275,6 @@ async function verifyShellTemplateCanonical() {
     );
   }
 
-  // bun-runner.js hardcodes the enabledPlugins key because it is loaded raw by
-  // hosts, unbundled. Assert the copy still matches PLUGIN_SETTINGS_KEY -- a
-  // stale one here silently ignores a user who disabled the plugin.
-  if (!bunRunner.includes(`'${PLUGIN_SETTINGS_KEY}'`)) {
-    throw new Error(
-      `plugin/scripts/bun-runner.js does not check enabledPlugins['${PLUGIN_SETTINGS_KEY}'] — ` +
-      'it hardcodes the key from src/shared/plugin-identity.ts and has drifted from it.'
-    );
-  }
-
   // Parser-compat guard (issue #2791): bun-runner.js is invoked by hosts that
   // may run a pre-ES2020 Node whose ESM loader throws on optional chaining.
   // Strip comments, then forbid `?.` / `??` in executable code.
@@ -300,6 +285,22 @@ async function verifyShellTemplateCanonical() {
     throw new Error(
       'plugin/scripts/bun-runner.js uses optional chaining (?.) or nullish coalescing (??) — ' +
       'this launcher must parse on pre-ES2020 Node (issue #2791). Rewrite with explicit guards.'
+    );
+  }
+
+  // bun-runner.js hardcodes the enabledPlugins key: hosts load it raw, so it
+  // cannot import plugin-identity.ts. Assert the copy still matches
+  // PLUGIN_SETTINGS_KEY, or a user who disabled the plugin is ignored in
+  // silence. Matched against the comment-stripped source and anchored to the
+  // indexing expression, so the right key sitting in a comment or a dead
+  // branch beside a stale lookup does not satisfy this.
+  const settingsKeyLookup = new RegExp(
+    `enabledPlugins\\[\\s*'${PLUGIN_SETTINGS_KEY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'\\s*\\]`
+  );
+  if (!settingsKeyLookup.test(bunRunnerCode)) {
+    throw new Error(
+      `plugin/scripts/bun-runner.js does not read enabledPlugins['${PLUGIN_SETTINGS_KEY}'] — ` +
+      'it hardcodes the key from src/shared/plugin-identity.ts and has drifted from it.'
     );
   }
 
@@ -818,7 +819,38 @@ async function buildHooks() {
     // before regenerating it made an intentional generator change unbuildable —
     // the guard rejected the stale file, and the step that would have refreshed
     // it never ran.
-    const { MARKETPLACE_NAME, PLUGIN_NAME } = await verifyShellTemplateCanonical();
+    const {
+      MARKETPLACE_NAME, PLUGIN_NAME, CODEX_MARKETPLACE_NAME,
+    } = await verifyShellTemplateCanonical();
+
+    // Every guard above this line — the Rule A launchers, the cache roots, the
+    // bun-runner key — is derived from plugin-identity.ts and verified against
+    // something else derived from plugin-identity.ts. That is circular: rename
+    // the constants and leave these manifests alone and the whole chain stays
+    // internally consistent while pointing at a plugin Claude Code does not
+    // install under that name. These are the hand-authored files the hosts
+    // actually read, so they are where the loop gets closed.
+    for (const manifestPath of [
+      '.claude-plugin/plugin.json',
+      'plugin/.claude-plugin/plugin.json',
+      '.codex-plugin/plugin.json',
+      'plugin/.codex-plugin/plugin.json',
+    ]) {
+      const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')).name;
+      if (declared !== PLUGIN_NAME) {
+        throw new Error(`${manifestPath} declares name "${declared}" but src/shared/plugin-identity.ts says PLUGIN_NAME is "${PLUGIN_NAME}"`);
+      }
+    }
+    const claudeMarketplace = JSON.parse(fs.readFileSync('.claude-plugin/marketplace.json', 'utf-8'));
+    if (claudeMarketplace.name !== MARKETPLACE_NAME) {
+      throw new Error(`.claude-plugin/marketplace.json declares name "${claudeMarketplace.name}" but src/shared/plugin-identity.ts says MARKETPLACE_NAME is "${MARKETPLACE_NAME}"`);
+    }
+    if (!(claudeMarketplace.plugins ?? []).some((plugin) => plugin.name === PLUGIN_NAME)) {
+      throw new Error(`.claude-plugin/marketplace.json advertises no plugin named "${PLUGIN_NAME}"; Claude Code resolves ${PLUGIN_NAME}@${MARKETPLACE_NAME} by that pair`);
+    }
+    if (codexMarketplace.name !== CODEX_MARKETPLACE_NAME) {
+      throw new Error(`.agents/plugins/marketplace.json declares name "${codexMarketplace.name}" but src/shared/plugin-identity.ts says CODEX_MARKETPLACE_NAME is "${CODEX_MARKETPLACE_NAME}"`);
+    }
 
     const bundledMcp = JSON.parse(fs.readFileSync('plugin/.mcp.json', 'utf-8'));
     const mcpSearchCommand = bundledMcp.mcpServers?.['mcp-search']?.args?.join(' ') ?? '';

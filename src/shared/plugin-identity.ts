@@ -40,6 +40,13 @@ export const MARKETPLACE_REPO = 'Max2535/claude-mem';
 export const PLUGIN_SETTINGS_KEY = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
 
 /**
+ * The marketplace Codex is registered under by CodexCliInstaller. Codex keeps
+ * its own plugin namespace, so this is deliberately NOT {@link MARKETPLACE_NAME}
+ * — only the plugin half of a Codex cache path is shared with Claude Code's.
+ */
+export const CODEX_MARKETPLACE_NAME = 'claude-mem-local';
+
+/**
  * The per-plugin data directory name, which Claude Code spells
  * `<plugin>-<marketplace>` rather than with the `@` used everywhere else.
  */

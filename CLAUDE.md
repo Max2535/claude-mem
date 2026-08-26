@@ -13,11 +13,12 @@ npm run build-and-sync        # Build, sync to marketplace, restart worker
 This fork is installed as `claude-mem-pro-max@max2535`. Claude Code derives the
 three directories below from those two names, so never hardcode them — they live
 in `src/shared/plugin-identity.ts`, and `src/shared/paths.ts` exports the roots.
+`~/.claude` is the default only: every root honors `CLAUDE_CONFIG_DIR`.
 
 - **Source**: `<project-root>/src/`
 - **Built Plugin**: `<project-root>/plugin/`
 - **Marketplace**: `~/.claude/plugins/marketplaces/max2535/` (`MARKETPLACE_ROOT`)
-- **Installed Plugin**: `~/.claude/plugins/cache/max2535/claude-mem-pro-max/<version>/` (`PLUGIN_CACHE_ROOT`) — this is what the hooks actually resolve against
+- **Installed Plugin**: `~/.claude/plugins/cache/max2535/claude-mem-pro-max/` (`PLUGIN_CACHE_ROOT`) — this is what the hooks actually resolve against; each install is a `<version>/` subdirectory under it, and the newest wins
 - **Plugin Data**: `~/.claude/plugins/data/claude-mem-pro-max-max2535/`
 - **Database**: `~/.claude-mem/claude-mem.db`
 - **Chroma**: `~/.claude-mem/chroma/`

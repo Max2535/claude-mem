@@ -5,11 +5,9 @@ import { spawnSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildCodexWindowsCommand, buildShellCommand } from '../../src/build/hook-shell-template.js';
-import { MARKETPLACE_NAME, PLUGIN_NAME } from '../../src/shared/plugin-identity.js';
-
-// Codex's own local marketplace, mirrored from scripts/build-hooks.js. Only
-// the plugin half of the segment is shared with the Claude Code identity.
-const CODEX_MARKETPLACE_NAME = 'claude-mem-local';
+import {
+  CODEX_MARKETPLACE_NAME, MARKETPLACE_NAME, PLUGIN_NAME,
+} from '../../src/shared/plugin-identity.js';
 const CODEX_CACHE_ROOT = `$HOME/.codex/plugins/cache/${CODEX_MARKETPLACE_NAME}/${PLUGIN_NAME}`;
 const CLAUDE_CACHE_SEGMENT = `plugins/cache/${MARKETPLACE_NAME}/${PLUGIN_NAME}`;
 

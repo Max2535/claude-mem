@@ -8,6 +8,9 @@ import {
   selectWorkerScript,
 } from '../src/shared/worker-utils.js';
 import { buildCodexWindowsCommand, buildShellCommand } from '../src/build/hook-shell-template.js';
+import {
+  CODEX_MARKETPLACE_NAME, MARKETPLACE_NAME, PLUGIN_NAME,
+} from '../src/shared/plugin-identity.js';
 
 // Regression tests for the 2026-07-22 restart storm: the worker-script
 // resolver ranked plugin cache dirs by directory mtime, so Claude Code
@@ -147,8 +150,8 @@ describe('inline bootstrap resolvers stay in lockstep', () => {
     notFoundMessage: 'claude-mem: mcp server not found',
     mcpExtraCandidates: ['$PWD/plugin', '$PWD'],
     mcpExtraCacheRoots: [
-      '$HOME/.codex/plugins/cache/claude-mem-local/claude-mem',
-      '$HOME/.codex/plugins/cache/max2535/claude-mem-pro-max',
+      `$HOME/.codex/plugins/cache/${CODEX_MARKETPLACE_NAME}/${PLUGIN_NAME}`,
+      `$HOME/.codex/plugins/cache/${MARKETPLACE_NAME}/${PLUGIN_NAME}`,
     ],
   });
   const codexWindowsCommand = buildCodexWindowsCommand(['hook', 'codex', 'context']);
