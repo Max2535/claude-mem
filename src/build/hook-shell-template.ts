@@ -345,7 +345,6 @@ function jsArray(values: string[]): string {
 }
 
 export interface CodexWindowsCommandOptions {
-  startupVersionCheck?: boolean;
   /** Breadcrumb label, mirroring ShellTemplateOptions.failureSite. */
   failureSite?: string;
 }
@@ -379,13 +378,6 @@ export function buildCodexWindowsCommand(
     `if(!R){${options.failureSite ? nodeBreadcrumbStatement(options.failureSite, 'fs', 'p', 'h') + ';' : ''}process.stderr.write('claude-mem: plugin scripts not found\\n');process.exit(1)}`,
     "const env={...process.env,CLAUDE_MEM_CODEX_HOOK:'1'};",
   ];
-
-  if (options.startupVersionCheck) {
-    parts.push(
-      "const v=c.spawnSync(process.execPath,[p.join(R,'scripts','version-check.js')],{encoding:'utf8',env});",
-      "if(v.stdout&&v.stdout.trim()){process.stdout.write(v.stdout);if(!v.stdout.endsWith('\\n'))process.stdout.write('\\n');process.exit(0)}",
-    );
-  }
 
   parts.push(
     `const workerArgs=${jsArray(workerArgs)};`,

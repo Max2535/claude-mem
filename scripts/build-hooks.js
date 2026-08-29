@@ -81,21 +81,11 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand, iden
     trailingCommand: ccTrailing(...tail), notFoundMessage: 'claude-mem: plugin scripts not found',
     extraEnv: { CLAUDE_MEM_CODEX_HOOK: '1' }, ...extra,
   });
-  const codexStartupHook = () => buildShellCommand({
-    failureSite: 'codex:SessionStart:context',
-    host: 'codex-cli', requireFile: 'bun-runner.js', requireFileSecondary: 'worker-service.cjs',
-    trailingCommand: [
-      '_V=$(CLAUDE_MEM_CODEX_HOOK=1 node "$_P/scripts/version-check.js" || true);',
-      'if [ -n "$_V" ]; then printf \'%s\\n\' "$_V"; else',
-      'CLAUDE_MEM_CODEX_HOOK=1', ...ccTrailing('hook', 'codex', 'context'),
-      '; fi',
-    ],
-    notFoundMessage: 'claude-mem: plugin scripts not found',
-  });
+  // fe9180c2 dropped the version-check wrapper from the Codex SessionStart
+  // hook (it made cold starts unbounded); a8133ff9's breadcrumb label is
+  // orthogonal to that and stays.
   const codexHookPair = (tail, options = {}) => ({
-    command: options.startupVersionCheck
-      ? codexStartupHook()
-      : codexHook(tail, { failureSite: options.failureSite }),
+    command: codexHook(tail, { failureSite: options.failureSite }),
     commandWindows: buildCodexWindowsCommand(tail, options),
   });
 
@@ -146,7 +136,7 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand, iden
       kind: 'hooks',
       commands: {
         'SessionStart.0.0': codexHookPair(['hook', 'codex', 'context'], {
-          startupVersionCheck: true, failureSite: 'codex:SessionStart:context',
+          failureSite: 'codex:SessionStart:context',
         }),
         'UserPromptSubmit.0.0': codexHookPair(['hook', 'codex', 'session-init'], {
           failureSite: 'codex:UserPromptSubmit:session-init',
