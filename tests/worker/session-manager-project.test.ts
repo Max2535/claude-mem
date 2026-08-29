@@ -6,6 +6,22 @@ import type { ActiveSession } from '../../src/services/worker-types.js';
 import type { DatabaseManager } from '../../src/services/worker/DatabaseManager.js';
 import type { StorageResult, WorkerRef } from '../../src/services/worker/agents/types.js';
 
+// Same snapshot-and-restore dance as the ModeManager stub below, for the same
+// reason: both stubs replace the whole module namespace with a single export.
+// The worker-utils one left getWorkerPort pinned at 37777 for every later file
+// in the run, which is what made tests/servers/mcp-temporal-search.test.ts talk
+// to a port no server was listening on.
+import * as realWorkerServiceModule from '../../src/services/worker-service.js';
+import * as realWorkerUtilsModule from '../../src/shared/worker-utils.js';
+
+const realWorkerServiceSnapshot = { ...realWorkerServiceModule };
+const realWorkerUtilsSnapshot = { ...realWorkerUtilsModule };
+
+afterAll(() => {
+  mock.module('../../src/services/worker-service.js', () => realWorkerServiceSnapshot);
+  mock.module('../../src/shared/worker-utils.js', () => realWorkerUtilsSnapshot);
+});
+
 mock.module('../../src/services/worker-service.js', () => ({
   updateCursorContextForProject: () => Promise.resolve(),
 }));
