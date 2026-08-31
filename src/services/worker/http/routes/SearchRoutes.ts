@@ -336,6 +336,10 @@ export class SearchRoutes extends BaseRouteHandler {
         // hides: without this the health warning (applied inside
         // generateContextWithStats) never reached the user this early-return serves.
         res.send(withStartupWarnings(hintBody));
+        // This response carried the warning to a SessionStart, so consume the
+        // breadcrumb the same way the full path below does — otherwise a user
+        // who only ever opens zero-observation projects is re-warned forever.
+        clearHookFailures();
         return;
       }
     }

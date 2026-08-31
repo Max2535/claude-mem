@@ -94,8 +94,31 @@ function isLocalBrowserOrigin(value: string): boolean {
  * sends no Origin either but does send a Referer. So: judge the Origin when
  * there is one, fall back to the Referer, and let a request carrying neither
  * through.
+ *
+ * Origin and Referer alone are not enough: a page can suppress both (a no-cors
+ * GET sends no Origin, and referrerPolicy "no-referrer" drops the Referer), so
+ * "carrying neither" does not prove a non-browser caller. Sec-Fetch-Site does:
+ * it is a forbidden header name — every modern browser sets it on every request
+ * and no page can remove or forge it — and non-browser callers never send it.
+ * A cross-site value is therefore always a foreign page, whatever the other
+ * headers say. localhost pages on other ports report same-site, which the
+ * Origin rule below already admits, so only cross-site is rejected here.
  */
 export function rejectCrossOriginSubprocessRoutes(req: Request, res: Response, next: NextFunction): void {
+  const secFetchSite = req.headers['sec-fetch-site'];
+  if (secFetchSite === 'cross-site') {
+    logger.warn('SECURITY', 'Cross-site request to a subprocess-spawning route denied', {
+      endpoint: req.path,
+      method: req.method,
+      secFetchSite,
+    });
+    res.status(403).json({
+      error: 'Forbidden',
+      message: 'This endpoint does not accept cross-origin requests',
+    });
+    return;
+  }
+
   const origin = req.headers.origin;
   const referer = req.headers.referer;
   const claimed = typeof origin === 'string' && origin

@@ -29,13 +29,31 @@ function evt(overrides: Partial<AgentFlowEvent> & { seq: number }): AgentFlowEve
 }
 
 describe('mergeFlowEvents', () => {
-  it('orders newest first by seq, not by timestamp', () => {
+  it('orders newest first by timestamp, breaking millisecond ties on seq', () => {
     const merged = mergeFlowEvents([], [
       evt({ seq: 1, at: 5_000 }),
       evt({ seq: 2, at: 1_000 }),
+      evt({ seq: 3, at: 1_000 }),
     ]);
 
-    expect(merged.map(e => e.seq)).toEqual([2, 1]);
+    expect(merged.map(e => e.seq)).toEqual([1, 3, 2]);
+  });
+
+  it('sorts post-restart events above the surviving pre-restart stream', () => {
+    // A worker restart resets seq to 1. Ordering on seq alone pinned the dead
+    // stream (high seq) to the top of the screen until FLOW_EVENT_LIMIT new
+    // events pushed it out.
+    const beforeRestart = mergeFlowEvents([], [
+      evt({ seq: 201, at: 10_000, detail: 'old' }),
+      evt({ seq: 202, at: 11_000, detail: 'old' }),
+    ]);
+    const merged = mergeFlowEvents(beforeRestart, [
+      evt({ seq: 1, at: 20_000, detail: 'new' }),
+      evt({ seq: 2, at: 21_000, detail: 'new' }),
+    ]);
+
+    expect(merged.map(e => e.detail)).toEqual(['new', 'new', 'old', 'old']);
+    expect(merged[0].seq).toBe(2);
   });
 
   it('drops duplicates when a reconnect replays the ring', () => {

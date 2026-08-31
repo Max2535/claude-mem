@@ -114,6 +114,21 @@ describe('token usage schema (v50)', () => {
     expect(store.getTranscriptReadState('/tmp/gone.jsonl')).toBeNull();
   });
 
+  // The Stop hook carries no project, so token ingestion resolves it from the
+  // session row init created. A NULL here makes the user's spend invisible to
+  // the viewer's per-project Token Burn filter.
+  it('resolves the project a content session was initialized with', () => {
+    store.createSDKSession('cs-with-project', 'my-project', 'prompt', undefined, 'claude');
+    expect(store.getProjectForContentSession('cs-with-project', 'claude')).toBe('my-project');
+
+    // Wrong platform, unknown session, and a project never filled in all
+    // answer NULL rather than guessing.
+    expect(store.getProjectForContentSession('cs-with-project', 'codex')).toBeNull();
+    expect(store.getProjectForContentSession('cs-unknown', 'claude')).toBeNull();
+    store.createSDKSession('cs-no-project', '', 'prompt', undefined, 'claude');
+    expect(store.getProjectForContentSession('cs-no-project', 'claude')).toBeNull();
+  });
+
   it('re-running the constructor over the same database changes nothing', () => {
     store.recordTokenUsage(event());
     const reopened = new SessionStore(store.db);

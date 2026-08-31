@@ -117,7 +117,9 @@ function shellTemplateManifest(buildShellCommand, buildCodexWindowsCommand, iden
             hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: '' },
             systemMessage:
               'claude-mem could not locate its plugin scripts, so nothing was loaded or recorded '
-              + 'for this session. Reinstall with: claude plugin install claude-mem-pro-max@max2535',
+              // The install id tracks plugin-identity.ts like every path above;
+              // as a literal it would keep naming the pre-rename id (87a7e4c).
+              + `for this session. Reinstall with: claude plugin install ${identity.PLUGIN_SETTINGS_KEY}`,
           },
         }),
         'UserPromptSubmit.0.0': claudeHook(['hook', 'claude-code', 'session-init'], {
