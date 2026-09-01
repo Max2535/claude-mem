@@ -1167,6 +1167,11 @@ describe("per-user device admission bound", () => {
 		expect((await metadata(userId)).devices.map((device) => device.device_id)).toEqual(["known-device"]);
 	});
 
+	// 240 concurrent SELF.fetch round trips through one Durable Object. It costs
+	// ~1.9s on a developer machine against vitest's 5s default, so a CI runner
+	// half that speed runs out of budget with the assertions still unevaluated —
+	// which is what happened on b642b47b. Same explicit budget as the
+	// canonical-body sweep above; the work itself is unchanged.
 	it("concurrent status probes create zero devices and cannot exhaust admission", async () => {
 		const userId = "device-cap-concurrent";
 		const probes = await Promise.all(Array.from({ length: 80 }, (_, index) => {
@@ -1202,8 +1207,10 @@ describe("per-user device admission bound", () => {
 		));
 		expect(afterCapProbes.every((response) => response.status === 200)).toBe(true);
 		expect((await metadata(userId)).devices).toHaveLength(MAX_DEVICES_PER_USER);
-	});
+	}, 15_000);
 
+	// ~1.7s for the same reason: MAX_DEVICES_PER_USER sequential admissions before
+	// it even reaches the paths it is asserting on.
 	it("keeps existing devices writable/readable while new admitting paths are rejected at the cap", async () => {
 		const userId = "device-cap-http-paths";
 		for (let index = 0; index < MAX_DEVICES_PER_USER; index++) {
@@ -1276,5 +1283,5 @@ describe("per-user device admission bound", () => {
 		expect(state.devices).toHaveLength(MAX_DEVICES_PER_USER);
 		expect(state.devices.find((device) => device.device_id === "device-0")?.name).toBe("Named 0");
 		expect(state.devices.some((device) => device.device_id === "unknown-rename")).toBe(false);
-	});
+	}, 15_000);
 });
