@@ -764,7 +764,13 @@ ${O.stack??""}
       ${n}
       ORDER BY created_at_epoch DESC
       LIMIT 1
-    `).get(...t)||null}getSessionById(e){return this.db.prepare(`
+    `).get(...t)||null}getProjectForContentSession(e,s){let t=s?L(s):u,n=this.db.prepare(`
+      SELECT project
+      FROM sdk_sessions
+      WHERE COALESCE(NULLIF(platform_source, ''), ?) = ?
+        AND content_session_id = ?
+      LIMIT 1
+    `).get(u,t,e);return n?.project?n.project:null}getSessionById(e){return this.db.prepare(`
       SELECT id, content_session_id, memory_session_id, project,
              COALESCE(platform_source, '${u}') as platform_source,
              user_prompt, custom_title, status
@@ -932,7 +938,7 @@ ${O.stack??""}
         session_db_id, content_session_id, prompt_number, prompt_text,
         created_at, created_at_epoch
       ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(s,e.content_session_id,e.prompt_number,e.prompt_text,e.created_at,e.created_at_epoch).lastInsertRowid}}recordTokenUsage(e){this.db.prepare(`
+    `).run(s,e.content_session_id,e.prompt_number,e.prompt_text,e.created_at,e.created_at_epoch).lastInsertRowid}}recordTokenUsage(e){let s=this.db.prepare(`
       INSERT INTO token_usage_events (
         event_key, source, component, platform_source, project, session_db_id,
         content_session_id, model, input_tokens, cache_creation_tokens,
@@ -940,7 +946,7 @@ ${O.stack??""}
         is_sidechain, created_at, created_at_epoch
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(event_key) DO NOTHING
-    `).run(e.eventKey,e.source,e.component,L(e.platformSource),e.project??null,e.sessionDbId??null,e.contentSessionId??null,e.model??null,e.inputTokens??0,e.cacheCreationTokens??0,e.cacheReadTokens??0,e.outputTokens??0,e.thinkingTokens??0,e.costUsd??null,e.isSidechain?1:0,new Date(e.epoch).toISOString(),e.epoch)}recordTokenUsageBatch(e,s,t,n){let r=0;return this.db.transaction(()=>{let a=this.db.prepare("SELECT COUNT(*) AS n FROM token_usage_events").get();for(let p of e)this.recordTokenUsage(p);r=this.db.prepare("SELECT COUNT(*) AS n FROM token_usage_events").get().n-a.n;let c=e.length>0?e[e.length-1].eventKey:null;this.db.prepare(`
+    `).run(e.eventKey,e.source,e.component,L(e.platformSource),e.project??null,e.sessionDbId??null,e.contentSessionId??null,e.model??null,e.inputTokens??0,e.cacheCreationTokens??0,e.cacheReadTokens??0,e.outputTokens??0,e.thinkingTokens??0,e.costUsd??null,e.isSidechain?1:0,new Date(e.epoch).toISOString(),e.epoch);return Number(s.changes)}recordTokenUsageBatch(e,s,t,n){let r=0;return this.db.transaction(()=>{for(let _ of e)r+=this.recordTokenUsage(_);let a=e.length>0?e[e.length-1].eventKey:null;this.db.prepare(`
         INSERT INTO transcript_read_state (transcript_path, byte_offset, file_size, last_message_id, updated_at_epoch)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(transcript_path) DO UPDATE SET
@@ -948,7 +954,7 @@ ${O.stack??""}
           file_size = excluded.file_size,
           last_message_id = COALESCE(excluded.last_message_id, transcript_read_state.last_message_id),
           updated_at_epoch = excluded.updated_at_epoch
-      `).run(s,t,n,c,Date.now())})(),r}getTranscriptReadState(e){let s=this.db.prepare(`
+      `).run(s,t,n,a,Date.now())})(),r}getTranscriptReadState(e){let s=this.db.prepare(`
       SELECT transcript_path, byte_offset, file_size, last_message_id, updated_at_epoch
       FROM transcript_read_state WHERE transcript_path = ?
     `).get(e);return s?{transcriptPath:s.transcript_path,byteOffset:s.byte_offset,fileSize:s.file_size,lastMessageId:s.last_message_id,updatedAtEpoch:s.updated_at_epoch}:null}clearTranscriptReadState(e){this.db.prepare("DELETE FROM transcript_read_state WHERE transcript_path = ?").run(e)}};0&&(module.exports={SessionStore});

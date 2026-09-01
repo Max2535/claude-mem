@@ -2393,6 +2393,23 @@ export class SessionStore {
     return (stmt.get(...params) as SummaryDetailRow | null) || null;
   }
 
+  /**
+   * The project a content session was initialized with, for callers that hold
+   * only the ids the Stop hook sends (token-usage attribution). NULL when the
+   * session row is missing or was created before init filled the project in.
+   */
+  getProjectForContentSession(contentSessionId: string, platformSource?: string): string | null {
+    const normalizedPlatformSource = platformSource ? normalizePlatformSource(platformSource) : DEFAULT_PLATFORM_SOURCE;
+    const row = this.db.prepare(`
+      SELECT project
+      FROM sdk_sessions
+      WHERE COALESCE(NULLIF(platform_source, ''), ?) = ?
+        AND content_session_id = ?
+      LIMIT 1
+    `).get(DEFAULT_PLATFORM_SOURCE, normalizedPlatformSource, contentSessionId) as { project: string | null } | undefined;
+    return row?.project ? row.project : null;
+  }
+
   getSessionById(id: number): SdkSessionDetailRow | null {
     const stmt = this.db.prepare(`
       SELECT id, content_session_id, memory_session_id, project,
@@ -3329,9 +3346,14 @@ export class SessionStore {
    * every constraint, so a malformed source or component would vanish as a
    * missing row instead of raising. Only the duplicate key is meant to be
    * quiet.
+   *
+   * Returns 1 when the row landed, 0 when the key was a duplicate. This comes
+   * from `.run().changes`, which the SyncApply.applySetTitle note distrusts —
+   * but only after a RETURNING statement in the same transaction, and nothing
+   * on the token-usage path runs RETURNING.
    */
-  recordTokenUsage(event: TokenUsageEvent): void {
-    this.db.prepare(`
+  recordTokenUsage(event: TokenUsageEvent): number {
+    const result = this.db.prepare(`
       INSERT INTO token_usage_events (
         event_key, source, component, platform_source, project, session_db_id,
         content_session_id, model, input_tokens, cache_creation_tokens,
@@ -3358,6 +3380,7 @@ export class SessionStore {
       new Date(event.epoch).toISOString(),
       event.epoch
     );
+    return Number(result.changes);
   }
 
   /**
@@ -3374,12 +3397,12 @@ export class SessionStore {
   ): number {
     let inserted = 0;
     const tx = this.db.transaction(() => {
-      const before = this.db.prepare('SELECT COUNT(*) AS n FROM token_usage_events').get() as { n: number };
+      // Summing per-insert `changes` rather than diffing COUNT(*): the table
+      // grows without pruning, and two full counts per batch made every Stop
+      // hook scan it end-to-end twice for a number the inserts already report.
       for (const event of events) {
-        this.recordTokenUsage(event);
+        inserted += this.recordTokenUsage(event);
       }
-      const after = this.db.prepare('SELECT COUNT(*) AS n FROM token_usage_events').get() as { n: number };
-      inserted = after.n - before.n;
 
       const lastMessageId = events.length > 0 ? events[events.length - 1].eventKey : null;
       this.db.prepare(`

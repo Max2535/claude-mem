@@ -21,6 +21,13 @@ export const FLOW_EVENT_LIMIT = 500;
  * a *new* event. That is why the incoming batch wins on collision rather than
  * being discarded — a stale duplicate and a post-restart event look identical,
  * and keeping the newer arrival is right in both cases.
+ *
+ * Ordering is by timestamp, with seq only breaking millisecond ties. Ordering
+ * on seq alone pinned every surviving pre-restart event (high seq) above the
+ * new stream (seq back at 1) until enough new events accumulated to push them
+ * past the cap — the screen showed dead events as "newest" for hundreds of
+ * turns. Both streams share one machine's clock, so `at` orders them truthfully
+ * across the restart; within one delivery seq still reflects emit order.
  */
 export function mergeFlowEvents(
   existing: AgentFlowEvent[],
@@ -31,7 +38,7 @@ export function mergeFlowEvents(
   for (const event of existing) bySeq.set(event.seq, event);
   for (const event of incoming) bySeq.set(event.seq, event);
   return [...bySeq.values()]
-    .sort((a, b) => b.seq - a.seq)
+    .sort((a, b) => (b.at - a.at) || (b.seq - a.seq))
     .slice(0, FLOW_EVENT_LIMIT);
 }
 

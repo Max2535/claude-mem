@@ -383,11 +383,15 @@ export class SessionRoutes extends BaseRouteHandler {
     setImmediate(() => {
       try {
         const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
-        ingestTranscriptUsage(this.dbManager.getSessionStore(), {
+        const store = this.dbManager.getSessionStore();
+        // The Stop hook sends no project, but session-init recorded one on the
+        // sdk_sessions row. Rows stored with a NULL project vanish from the
+        // viewer's per-project Token Burn series, so resolve it here.
+        ingestTranscriptUsage(store, {
           transcriptPath,
           contentSessionId,
           platformSource,
-          project: null,
+          project: store.getProjectForContentSession(contentSessionId, platformSource),
           enabled: settings.CLAUDE_MEM_TOKEN_BURN_CAPTURE === 'true',
         });
       } catch {

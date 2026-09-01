@@ -168,6 +168,30 @@ describe('SearchRoutes Welcome Hint', () => {
     expect(generateContextStub).not.toHaveBeenCalled();
   });
 
+  it('clears the hook-failure breadcrumb after the welcome-hint early return delivered it', async () => {
+    // The warning promises "This notice clears once reported". A user who only
+    // ever opens zero-observation projects takes this early return every
+    // session — returning before clearHookFailures() re-warned them forever.
+    const breadcrumbPath = join(realPaths.paths.dataDir(), 'hook-resolution-failures.log');
+    mkdirSync(realPaths.paths.dataDir(), { recursive: true });
+    writeFileSync(breadcrumbPath, '2026-08-01T00:00:00Z\t/home/user/swift\tSessionStart\n');
+
+    const routes = new SearchRoutes(mockSearchManager);
+    const handler = captureContextInjectHandler(routes);
+
+    const res = createMockRes();
+    const req = { query: { projects: '/path/to/empty-project' } } as unknown as Request;
+
+    handler(req, res as unknown as Response);
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(res.send).toHaveBeenCalledTimes(1);
+    const body = (res.send as any).mock.calls[0][0] as string;
+    expect(body).toContain('claude-mem hooks failed to start');
+    expect(body).toContain('# claude-mem status');
+    expect(existsSync(breadcrumbPath)).toBe(false);
+  });
+
   it('skips the welcome hint when at least one observation exists', async () => {
     countQueryStub = mock(() => ({ count: 7 }));
     prepareStub = mock(() => ({ get: countQueryStub }));

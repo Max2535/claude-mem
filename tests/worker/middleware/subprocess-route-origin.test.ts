@@ -99,6 +99,32 @@ describe('cross-origin gate on subprocess-spawning routes', () => {
     expect(walks).toBe(1);
   });
 
+  it('rejects a cross-site fetch even when the page suppressed Origin and Referer', async () => {
+    // A no-cors GET sends no Origin, and referrerPolicy "no-referrer" drops the
+    // Referer — but the browser still stamps Sec-Fetch-Site, and no page can
+    // remove or forge it. This is the drive-by the Origin/Referer rules miss.
+    await start();
+    const response = await walk({ 'Sec-Fetch-Site': 'cross-site' });
+    expect(response.status).toBe(403);
+    expect(walks).toBe(0);
+  });
+
+  it('rejects cross-site regardless of what Origin claims', async () => {
+    await start();
+    const response = await walk({ 'Sec-Fetch-Site': 'cross-site', Origin: `http://localhost:${port}` });
+    expect(response.status).toBe(403);
+    expect(walks).toBe(0);
+  });
+
+  it('lets same-origin, same-site, and user-initiated Sec-Fetch-Site values through', async () => {
+    await start();
+    for (const site of ['same-origin', 'same-site', 'none']) {
+      const response = await walk({ 'Sec-Fetch-Site': site, Referer: `http://localhost:${port}/` });
+      expect(response.status).toBe(200);
+    }
+    expect(walks).toBe(3);
+  });
+
   it('leaves the non-spawning search routes alone', async () => {
     await start();
     const response = await fetch(`http://127.0.0.1:${port}/api/search/temporal`.replace('/temporal', '/by-file'), {
