@@ -58,13 +58,23 @@ jobs:
           $env:PATH = "$(Join-Path $env:USERPROFILE '.bun\bin');$env:PATH"
 
           $scratchHome = Join-Path $env:RUNNER_TEMP 'sync-home'
-          $marketplace = Join-Path $scratchHome '.claude\plugins\marketplaces\thedotmack'
+
+          # Redirect the profile before deriving anything from it: os.homedir()
+          # reads USERPROFILE on Windows and sync-marketplace.cjs resolves its
+          # destination at load time.
+          $env:USERPROFILE = $scratchHome
+
+          # Ask the script where it will write rather than re-spelling the
+          # marketplace name. This assertion carried upstream's `thedotmack`
+          # while the fork syncs to the name in .claude-plugin/marketplace.json,
+          # so it watched a directory nothing populates and threw every run.
+          $marketplace = (node -p "require('./scripts/sync-marketplace.cjs').INSTALLED_PATH").Trim()
+
           $dep = Join-Path $marketplace 'node_modules\pre-existing-dep'
           New-Item -ItemType Directory -Force -Path $dep | Out-Null
           Set-Content -Path (Join-Path $marketplace 'STALE-FROM-OLD-BUILD.js') -Value 'stale'
           Set-Content -Path (Join-Path $dep 'index.js') -Value 'installed'
 
-          $env:USERPROFILE = $scratchHome
           node scripts/sync-marketplace.cjs
 
           if (-not (Test-Path (Join-Path $marketplace 'plugin\.claude-plugin\plugin.json'))) {
